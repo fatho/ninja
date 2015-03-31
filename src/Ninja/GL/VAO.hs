@@ -1,23 +1,23 @@
 module Ninja.GL.VAO where
 
-import Control.Applicative
-import Control.Monad.IO.Class
-import Data.Coerce
-import Foreign.Storable
-import Foreign.Marshal.Alloc
-import Foreign.Marshal.Array
-import Graphics.GL.Types
-import Graphics.GL.Core33
-import Data.Default.Class
-import Data.StateVar
+import           Control.Applicative
+import           Control.Monad.IO.Class
+import           Data.Coerce
+import           Data.Default.Class
+import           Data.StateVar
+import           Foreign.Marshal.Alloc
+import           Foreign.Marshal.Array
+import           Foreign.Storable
+import           Graphics.GL.Core33
+import           Graphics.GL.Types
 
-import Ninja.GL.Object
+import           Ninja.GL.Object
 
 -- | Vertex Array Handle.
 newtype VAO = VAO GLuint deriving (Eq, Ord, Show)
 
 instance Object VAO where
-  objid = coerce
+  objectId = coerce
   delete xs = liftIO $ withArrayLen (coerce xs) $ \n ps -> glDeleteVertexArrays (fromIntegral n) ps
 
 instance GenObject VAO where

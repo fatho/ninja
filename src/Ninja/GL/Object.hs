@@ -1,13 +1,13 @@
 module Ninja.GL.Object where
 
-import Control.Monad
-import Control.Monad.IO.Class
-import Graphics.GL.Types
+import           Control.Monad
+import           Control.Monad.IO.Class
+import           Graphics.GL.Types
 
 -- | Generic interface to an OpenGL object.
 -- <https://www.opengl.org/wiki/OpenGL_Object>
 class Object a where
-  {-# MINIMAL objid, (delete | delete1) #-}
+  {-# MINIMAL objectId, (delete | delete1) #-}
 
   -- | glDelete* call
   delete :: MonadIO m => [a] -> m ()
@@ -18,7 +18,7 @@ class Object a where
   delete1 = delete . (:[])
 
   -- | The underlying OpenGL object ID
-  objid   :: a -> GLuint
+  objectId :: a -> GLuint
 
 -- | Generic interface to an object that also can be user generated.
 class Object a => GenObject a where

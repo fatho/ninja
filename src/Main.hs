@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds  #-}
 {-# LANGUAGE LambdaCase #-}
 module Main where
 
@@ -5,19 +6,55 @@ import           Control.Exception
 import           Control.Monad
 import           Control.Monad.Except
 import           Control.Monad.IfElse
-import qualified Graphics.UI.GLFW       as GLFW
+import           Data.Bits
+import qualified Data.ByteString      as BS
+import           Foreign.Ptr
 import           Graphics.GL.Core33
-import Foreign.Ptr
-import Graphics.GL.Types
+import           Graphics.GL.Types
+import qualified Graphics.UI.GLFW     as GLFW
+import           Linear
+import           System.Directory     as Dir
 
-import Ninja.GL
+import           Ninja.GL
 
-testBuffer :: [GLfloat]
+testBuffer :: [V3 GLfloat]
 testBuffer =
-  [ -1.0, -1.0, 0.0
-  ,  1.0, -1.0, 0.0
-  ,  0.0,  1.0, 0.0
+  [ V3 (-1.0) (-1.0) 0.0
+  , V3   1.0  (-1.0) 0.0
+  , V3   0.0    1.0  0.0
   ]
+
+loadShaders :: FilePath -> FilePath -> IO Program
+loadShaders vertPath fragPath = do
+  putStrLn "Loading source from files"
+  vertSource <- BS.readFile vertPath
+  fragSource <- BS.readFile fragPath
+  putStrLn "Creating shader objects"
+  vertShader <- gen1 :: IO (Shader VertexShader)
+  fragShader <- gen1 :: IO (Shader FragmentShader)
+  putStrLn "Feeding source to shaders"
+  shaderSourceBytes vertShader $= vertSource
+  shaderSourceBytes fragShader $= fragSource
+  putStrLn "Compiling vertex shader"
+  (success, msg) <- compileShader vertShader
+  putStrLn msg
+  unless success $ ioError $ userError "failed to compile vertex shader"
+  putStrLn "Compiling fragment shader"
+  (success, msg) <- compileShader fragShader
+  putStrLn msg
+  unless success $ ioError $ userError "failed to compile fragment shader"
+  putStrLn "Creating program"
+  prog <- gen1
+  attachShader prog vertShader
+  attachShader prog fragShader
+  putStrLn "Linking program"
+  (success, msg) <- linkProgram prog
+  putStrLn msg
+  unless success $ ioError $ userError "failed to link program"
+  attachedShaders prog $= []
+  delete1 vertShader
+  delete1 fragShader
+  return prog
 
 main :: IO ()
 main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
@@ -26,17 +63,21 @@ main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
     boundVertexArray $= vao
     boundBuffer ArrayBuffer $= vbuf
     bufferData ArrayBuffer StaticDraw testBuffer
-    untilM (GLFW.windowShouldClose win) $ do
-      (fh, fw) <- GLFW.getFramebufferSize win
-      let ratio = fromIntegral fw / fromIntegral fh
-      -- glViewport 0 0 (fromIntegral fw) (fromIntegral fh)
-      -- glClear GL_COLOR_BUFFER_BIT
 
-      glEnableVertexAttribArray 0
-      boundBuffer ArrayBuffer $= vbuf
-      glVertexAttribPointer 0 3 GL_FLOAT GL_FALSE 0 nullPtr
-      glDrawArrays GL_TRIANGLES 0 3
-      glDisableVertexAttribArray 0
+    prog <- loadShaders "shaders/vert.glsl" "shaders/frag.glsl"
+
+    untilM (GLFW.windowShouldClose win) $ do
+      (fw, fh) <- GLFW.getFramebufferSize win
+      let ratio = fromIntegral fw / fromIntegral fh
+      glViewport 0 0 (fromIntegral fw) (fromIntegral fh)
+      glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
+
+      withProgram prog $ do
+          glEnableVertexAttribArray 0
+          boundBuffer ArrayBuffer $= vbuf
+          glVertexAttribPointer 0 3 GL_FLOAT GL_FALSE 0 nullPtr
+          glDrawArrays GL_TRIANGLES 0 3
+          glDisableVertexAttribArray 0
 
       GLFW.swapBuffers win
       GLFW.pollEvents
