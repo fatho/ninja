@@ -22,6 +22,7 @@ executable yolo-ninja
                         Ninja.GL.Buffer
                         Ninja.GL.Object
                         Ninja.GL.Shader
+                        Ninja.GL.Uniform
                         Ninja.GL.VAO
                         Ninja.Types
   -- other-extensions:    

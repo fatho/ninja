@@ -65,6 +65,7 @@ main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
     bufferData ArrayBuffer StaticDraw testBuffer
 
     prog <- loadShaders "shaders/vert.glsl" "shaders/frag.glsl"
+    fillColorUniform <- uniformLocation prog "fill_color"
 
     untilM (GLFW.windowShouldClose win) $ do
       (fw, fh) <- GLFW.getFramebufferSize win
@@ -72,7 +73,10 @@ main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
       glViewport 0 0 (fromIntegral fw) (fromIntegral fh)
       glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
 
+      Just time <- GLFW.getTime
+
       withProgram prog $ do
+          uniform fillColorUniform (V3 (realToFrac $ (sin (2 * time) + 1) / 2) (realToFrac $ (sin time + 1) / 2) (realToFrac $ (sin (3 * time) + 1) / 2) :: V3 Float)
           glEnableVertexAttribArray 0
           boundBuffer ArrayBuffer $= vbuf
           glVertexAttribPointer 0 3 GL_FLOAT GL_FALSE 0 nullPtr
