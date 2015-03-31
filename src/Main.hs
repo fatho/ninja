@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 module Main where
 
+import qualified Codec.Picture        as JP
 import           Control.Exception
 import           Control.Monad
 import           Control.Monad.Except
@@ -16,6 +17,11 @@ import           Linear
 import           System.Directory     as Dir
 
 import           Ninja.GL
+
+ngon :: Int -> GLfloat -> [V3 GLfloat]
+ngon n radius = map mkV [0..n-1] where
+  mkV i = V3 (cos (toAngle i) * radius) (sin (toAngle i) * radius) 0
+  toAngle i = fromIntegral i / fromIntegral n * 2 * pi
 
 testBuffer :: [V3 GLfloat]
 testBuffer =
@@ -58,30 +64,51 @@ loadShaders vertPath fragPath = do
 
 main :: IO ()
 main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
-    vao  <- gen1 :: IO VAO
-    vbuf <- gen1 :: IO (Buffer GLfloat)
-    boundVertexArray $= vao
+    vao  <- gen1
+    vbuf <- gen1
+    boundVertexArray        $= vao
     boundBuffer ArrayBuffer $= vbuf
-    bufferData ArrayBuffer StaticDraw testBuffer
+    bufferData ArrayBuffer  $= (StaticDraw, ngon 4 1)
 
-    prog <- loadShaders "shaders/vert.glsl" "shaders/frag.glsl"
-    fillColorUniform <- uniformLocation prog "fill_color"
+    prog <- loadShaders "data/shaders/vert.glsl" "data/shaders/frag.glsl"
+    fillColorUniform <- uniformOf prog "fill_color"
+    modelMatUniform  <- uniformOf prog "model_matrix"
+    viewMatUniform   <- uniformOf prog "view_matrix"
+
+    vertexPos <- attributeOf prog "vertexPos"
+    vertexTex <- attributeOf prog "texCoord"
+
+    Right tex <- JP.readImage "data/tex/foo.png"
+
+    textureImage2D Texture2D 0 GL_RGBA tex
 
     untilM (GLFW.windowShouldClose win) $ do
       (fw, fh) <- GLFW.getFramebufferSize win
       let ratio = fromIntegral fw / fromIntegral fh
       glViewport 0 0 (fromIntegral fw) (fromIntegral fh)
-      glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
+      glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
 
       Just time <- GLFW.getTime
 
       withProgram prog $ do
-          uniform fillColorUniform (V3 (realToFrac $ (sin (2 * time) + 1) / 2) (realToFrac $ (sin time + 1) / 2) (realToFrac $ (sin (3 * time) + 1) / 2) :: V3 Float)
-          glEnableVertexAttribArray 0
-          boundBuffer ArrayBuffer $= vbuf
-          glVertexAttribPointer 0 3 GL_FLOAT GL_FALSE 0 nullPtr
-          glDrawArrays GL_TRIANGLES 0 3
-          glDisableVertexAttribArray 0
+        viewMatUniform  $= (ortho (-ratio) ratio 1 (-1) (-100) 100 :: M44 Float)
+        modelMatUniform $= (mkTransformation
+          (axisAngle (V3 0 0 1) (realToFrac time)) 0 :: M44 Float)
+        fillColorUniform $=
+          (V3 (realToFrac $ (sin (2 * time) + 1) / 2)
+              (realToFrac $ (sin time + 1) / 2)
+              (realToFrac $ (sin (3 * time) + 1) / 2)
+              :: V3 Float)
+
+        attribEnabled vertexPos $= True
+        boundBuffer ArrayBuffer $= vbuf
+        attribEnabled vertexTex $= True
+        attribLayout vertexPos $= VertexLayout 3 GL_FLOAT False 0 0
+        attribLayout vertexTex $= VertexLayout 2 GL_FLOAT False 0 12
+
+        glDrawArrays GL_TRIANGLE_FAN 0 4
+
+        attribEnabled vertexPos $= False
 
       GLFW.swapBuffers win
       GLFW.pollEvents

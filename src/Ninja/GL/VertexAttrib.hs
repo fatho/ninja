@@ -1,0 +1,67 @@
+module Ninja.GL.VertexAttrib where
+
+import           Control.Applicative
+import           Control.Exception
+import           Control.Monad
+import           Control.Monad.IO.Class
+import qualified Data.ByteString        as BS
+import qualified Data.ByteString.Unsafe as BSU
+import           Data.Coerce
+import           Data.Default.Class
+import           Data.StateVar
+import qualified Data.Vector.Storable   as VS
+import           Foreign.C.String
+import           Foreign.ForeignPtr
+import           Foreign.Marshal.Alloc
+import           Foreign.Marshal.Array
+import           Foreign.Ptr
+import           Foreign.Storable
+import           Graphics.GL.Core33
+import           Graphics.GL.Types
+
+import           Ninja.GL.Object
+import           Ninja.GL.Program
+import           Ninja.GL.Types
+import           Ninja.GL.VertexArray
+
+-- * Vertex Attributes
+
+-- | Handle to a vertex attribute.
+newtype VertexAttrib = VertexAttrib GLuint deriving (Eq, Ord, Show)
+
+-- | Returns the location of a vertex attribute.
+attributeOf :: Program -> String -> IO VertexAttrib
+attributeOf prog name = do
+  loc <- withCString name (glGetAttribLocation (coerce prog))
+  when (loc < 0) $ ioError $ userError $ "invalid attrib location of '" ++ name ++ "': " ++ show loc
+  return $ VertexAttrib $ fromIntegral loc
+
+-- | Layout of a vertex attribute.
+data VertexLayout = VertexLayout
+  { attribSize      :: Int
+  , attribType      :: GLenum
+  , attribNormalize :: Bool
+  , attribStride    :: Int
+  , attribPointer   :: IntPtr
+  }
+  deriving (Eq, Show)
+
+-- | Controls if a vertex attribute is enabled.
+attribEnabled :: VertexAttrib -> StateVar Bool
+attribEnabled va = makeStateVar g s where
+  g = (GL_FALSE /=) <$> alloca (\p -> glGetVertexAttribiv (coerce va) GL_VERTEX_ATTRIB_ARRAY_ENABLED p >> peek p)
+  s True  = glEnableVertexAttribArray (coerce va)
+  s False = glDisableVertexAttribArray (coerce va)
+
+attribLayout :: VertexAttrib -> StateVar VertexLayout
+attribLayout va = makeStateVar g s where
+  g = undefined
+  s layout = glVertexAttribPointer (coerce va)
+                (fromIntegral $ attribSize layout)
+                (fromIntegral $ attribType layout)
+                (toGLBool $ attribNormalize layout)
+                (fromIntegral $ attribStride layout)
+                (intPtrToPtr  $ attribPointer layout)
+
+class Storable a => VertexData a where
+

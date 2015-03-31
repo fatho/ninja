@@ -60,16 +60,15 @@ instance Storable a => BufferData [a] where
     where l = fromIntegral size `div` sizeOf (undefined :: a)
 
 -- | Streams data from or to the buffer, see 'glBufferData'.
-bufferData :: (MonadIO m, BufferData a) => BufferTarget -> BufferUsage -> a -> m ()
-bufferData (BufferTarget _ t) (BufferUsage usage) dat = withRawData dat $ \s p -> glBufferData t s p usage
+bufferData :: (BufferData a) => BufferTarget -> SettableStateVar (BufferUsage, a)
+bufferData (BufferTarget _ t) = makeSettableStateVar $ \(BufferUsage usage, dat) ->
+  withRawData dat $ \s p -> glBufferData t s p usage
 
--- | Modifies a buffer, see 'glBufferSubData'.
-bufferSubData :: (MonadIO m, BufferData a) => BufferTarget -> GLintptr -> a -> m ()
-bufferSubData (BufferTarget _ t) off dat = withRawData dat $ \s p -> glBufferSubData t off s p
-
--- | Modifies a buffer, see 'glBufferSubData'.
-getBufferSubData :: (MonadIO m, BufferData a) => BufferTarget -> GLintptr -> GLsizeiptr -> m a
-getBufferSubData (BufferTarget _ t) off size = fromRawData size $ \p -> glGetBufferSubData t off size p
+-- | Modifies data in a buffer.
+bufferSubData :: BufferData a => BufferTarget -> GLintptr -> GLsizeiptr -> StateVar a
+bufferSubData (BufferTarget _ t) off size = makeStateVar g s where
+  g = fromRawData size $ \p -> glGetBufferSubData t off size p
+  s dat = withRawData dat $ \size' p -> glBufferSubData t off (min size size') p
 
 -- | Returns the size of a buffer.
 bufferSize :: BufferTarget -> GettableStateVar GLsizeiptr

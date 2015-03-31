@@ -4,11 +4,13 @@ module Ninja.GL
   , module SV
   ) where
 
-import           Ninja.GL.Buffer  as NGL
-import           Ninja.GL.Object  as NGL
-import           Ninja.GL.Program as NGL
-import           Ninja.GL.Shader  as NGL
-import           Ninja.GL.Uniform as NGL
-import           Ninja.GL.VAO     as NGL
+import           Ninja.GL.Buffer       as NGL
+import           Ninja.GL.Object       as NGL
+import           Ninja.GL.Program      as NGL
+import           Ninja.GL.Shader       as NGL
+import           Ninja.GL.Texture      as NGL
+import           Ninja.GL.Uniform      as NGL
+import           Ninja.GL.VertexArray  as NGL
+import           Ninja.GL.VertexAttrib as NGL
 
-import           Data.StateVar    as SV
+import           Data.StateVar         as SV

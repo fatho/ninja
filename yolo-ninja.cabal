@@ -22,8 +22,11 @@ executable yolo-ninja
                         Ninja.GL.Buffer
                         Ninja.GL.Object
                         Ninja.GL.Shader
+                        Ninja.GL.Types
+                        Ninja.GL.Texture
                         Ninja.GL.Uniform
-                        Ninja.GL.VAO
+                        Ninja.GL.VertexArray
+                        Ninja.GL.VertexAttrib
                         Ninja.Types
   -- other-extensions:    
   build-depends:        base >=4.7 && <4.8
@@ -39,5 +42,6 @@ executable yolo-ninja
                       , linear
                       , bytestring
                       , directory
+                      , JuicyPixels
   hs-source-dirs:       src
   default-language:     Haskell2010
