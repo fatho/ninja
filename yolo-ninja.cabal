@@ -18,7 +18,10 @@ cabal-version:       >=1.10
 
 executable yolo-ninja
   main-is:              Main.hs
-  -- other-modules:       
+  other-modules:        Ninja.GL
+                        Ninja.GL.Buffer
+                        Ninja.GL.Object
+                        Ninja.GL.VAO
   -- other-extensions:    
   build-depends:        base >=4.7 && <4.8
                       , GLFW-b
@@ -27,5 +30,8 @@ executable yolo-ninja
                       , mtl
                       , lens
                       , IfElse
+                      , data-default-class
+                      , StateVar
+                      , vector
   hs-source-dirs:       src
   default-language:     Haskell2010

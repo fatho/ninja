@@ -6,18 +6,50 @@ import           Control.Monad
 import           Control.Monad.Except
 import           Control.Monad.IfElse
 import qualified Graphics.UI.GLFW       as GLFW
+import           Graphics.GL.Core33
+import Foreign.Ptr
+import Graphics.GL.Types
+
+import Ninja.GL
+
+testBuffer :: [GLfloat]
+testBuffer =
+  [ -1.0, -1.0, 0.0
+  ,  1.0, -1.0, 0.0
+  ,  0.0,  1.0, 0.0
+  ]
 
 main :: IO ()
-main = withGLFW BorderlessFullscreen "Yolo Ninja" openGL33 $ \win ->
+main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
+    vao  <- gen1 :: IO VAO
+    vbuf <- gen1 :: IO (Buffer GLfloat)
+    boundVertexArray $= vao
+    boundBuffer ArrayBuffer $= vbuf
+    bufferData ArrayBuffer StaticDraw testBuffer
     untilM (GLFW.windowShouldClose win) $ do
+      (fh, fw) <- GLFW.getFramebufferSize win
+      let ratio = fromIntegral fw / fromIntegral fh
+      -- glViewport 0 0 (fromIntegral fw) (fromIntegral fh)
+      -- glClear GL_COLOR_BUFFER_BIT
+
+      glEnableVertexAttribArray 0
+      boundBuffer ArrayBuffer $= vbuf
+      glVertexAttribPointer 0 3 GL_FLOAT GL_FALSE 0 nullPtr
+      glDrawArrays GL_TRIANGLES 0 3
+      glDisableVertexAttribArray 0
+
       GLFW.swapBuffers win
       GLFW.pollEvents
+    delete1 vbuf
+    delete1 vao
+  where
+    hints = GLFW.WindowHint'Samples 4 : openGL33Core
 
 -- * GLFW Wrapper
 
 -- | Window hints stating the requirement of OpenGL 3.3 Core
-openGL33 :: [GLFW.WindowHint]
-openGL33 =
+openGL33Core :: [GLFW.WindowHint]
+openGL33Core =
   [ GLFW.WindowHint'OpenGLProfile GLFW.OpenGLProfile'Core
   , GLFW.WindowHint'ContextVersionMajor 3
   , GLFW.WindowHint'ContextVersionMinor 3
