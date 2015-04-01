@@ -23,6 +23,7 @@ import           Ninja.GL.Object
 import           Ninja.GL.Program
 import           Ninja.GL.Types
 import           Ninja.GL.VertexArray
+import           Ninja.Util
 
 -- * Vertex Attributes
 
@@ -49,7 +50,7 @@ data VertexLayout = VertexLayout
 -- | Controls if a vertex attribute is enabled.
 attribEnabled :: VertexAttrib -> StateVar Bool
 attribEnabled va = makeStateVar g s where
-  g = (GL_FALSE /=) <$> alloca (\p -> glGetVertexAttribiv (coerce va) GL_VERTEX_ATTRIB_ARRAY_ENABLED p >> peek p)
+  g = (GL_FALSE /=) <$> withPtrOut (glGetVertexAttribiv (coerce va) GL_VERTEX_ATTRIB_ARRAY_ENABLED)
   s True  = glEnableVertexAttribArray (coerce va)
   s False = glDisableVertexAttribArray (coerce va)
 

@@ -55,7 +55,7 @@ instance Default Texture where
 -- | Controls the currently active texture unit.
 activeTexture :: StateVar TextureUnit
 activeTexture = makeStateVar g s where
-  g = fromIntegral <$> alloca (\p -> glGetIntegerv GL_ACTIVE_TEXTURE p >> peek p)
+  g = fromIntegral <$> withPtrOut (glGetIntegerv GL_ACTIVE_TEXTURE)
   s = glActiveTexture
 
 -- | Changes the texture unit for the duration of the supplied action.
@@ -65,7 +65,7 @@ withActiveTexture = withVar activeTexture
 -- | Controls the currently bound texture for a texture target.
 boundTexture :: TextureTarget -> StateVar Texture
 boundTexture (TextureTarget binding target) = makeStateVar g s where
-  g = Texture . fromIntegral <$> alloca (\p -> glGetIntegerv binding p >> peek p)
+  g = Texture . fromIntegral <$> withPtrOut (glGetIntegerv binding)
   s tex = glBindTexture target (objectId tex)
 
 -- | Changes the texture for the duration of the supplied action.
@@ -150,8 +150,8 @@ newtype TextureWrap = TextureWrap GLenum deriving (Eq, Ord, Show)
 -- | Controls texture wrapping for 2D textures.
 textureWrap2D :: TextureTarget -> StateVar (TextureWrap, TextureWrap)
 textureWrap2D (TextureTarget binding target) = makeStateVar g s where
-  g = (,) <$> liftM (TextureWrap . fromIntegral) (alloca $ \p -> glGetTexParameteriv target GL_TEXTURE_WRAP_S p >> peek p)
-          <*> liftM (TextureWrap . fromIntegral) (alloca $ \p -> glGetTexParameteriv target GL_TEXTURE_WRAP_T p >> peek p)
+  g = (,) <$> liftM (TextureWrap . fromIntegral) (withPtrOut (glGetTexParameteriv target GL_TEXTURE_WRAP_S))
+          <*> liftM (TextureWrap . fromIntegral) (withPtrOut (glGetTexParameteriv target GL_TEXTURE_WRAP_T))
   s (TextureWrap s,TextureWrap t) = do
     glTexParameteri target GL_TEXTURE_WRAP_S (fromIntegral s)
     glTexParameteri target GL_TEXTURE_WRAP_T (fromIntegral t)
@@ -159,9 +159,9 @@ textureWrap2D (TextureTarget binding target) = makeStateVar g s where
 -- | Controls texture wrapping for 3D textures.
 textureWrap3D :: TextureTarget -> StateVar (TextureWrap, TextureWrap, TextureWrap)
 textureWrap3D (TextureTarget binding target) = makeStateVar g s where
-  g = (,,) <$> liftM (TextureWrap . fromIntegral) (alloca $ \p -> glGetTexParameteriv target GL_TEXTURE_WRAP_S p >> peek p)
-          <*> liftM (TextureWrap . fromIntegral) (alloca $ \p -> glGetTexParameteriv target GL_TEXTURE_WRAP_T p >> peek p)
-          <*> liftM (TextureWrap . fromIntegral) (alloca $ \p -> glGetTexParameteriv target GL_TEXTURE_WRAP_R p >> peek p)
+  g = (,,) <$> liftM (TextureWrap . fromIntegral) (withPtrOut (glGetTexParameteriv target GL_TEXTURE_WRAP_S))
+           <*> liftM (TextureWrap . fromIntegral) (withPtrOut (glGetTexParameteriv target GL_TEXTURE_WRAP_T))
+           <*> liftM (TextureWrap . fromIntegral) (withPtrOut (glGetTexParameteriv target GL_TEXTURE_WRAP_R))
   s (TextureWrap s,TextureWrap t,TextureWrap r) = do
     glTexParameteri target GL_TEXTURE_WRAP_S (fromIntegral s)
     glTexParameteri target GL_TEXTURE_WRAP_T (fromIntegral t)
@@ -170,8 +170,8 @@ textureWrap3D (TextureTarget binding target) = makeStateVar g s where
 -- | Controls the border color used for 'GL_CLAMP_TO_BORDER'.
 textureBorderColor :: TextureTarget -> StateVar Color
 textureBorderColor (TextureTarget _ target) = makeStateVar g s where
-  g = alloca $ \p -> glGetTexParameterfv target GL_TEXTURE_BORDER_COLOR (castPtr p) >> peek p
-  s col = alloca $ \p -> poke p col >> glTexParameterfv target GL_TEXTURE_BORDER_COLOR (castPtr p)
+  g = withPtrOut (glGetTexParameterfv target GL_TEXTURE_BORDER_COLOR . castPtr)
+  s col = withPtrIn col $ glTexParameterfv target GL_TEXTURE_BORDER_COLOR . castPtr
 
 pattern WrapRepeat = TextureWrap GL_REPEAT
 pattern WrapMirroredRepeat = TextureWrap GL_MIRRORED_REPEAT
@@ -185,13 +185,13 @@ newtype TextureFilter = TextureFilter GLenum deriving (Eq, Ord, Show)
 -- | Controls the 'GL_TEXTURE_MIN_FILTER'.
 textureMinFilter :: TextureTarget -> StateVar TextureFilter
 textureMinFilter (TextureTarget _ target) = makeStateVar g s where
-  g = TextureFilter . fromIntegral <$> alloca (\p -> glGetTexParameteriv target GL_TEXTURE_MIN_FILTER p >> peek p)
+  g = TextureFilter . fromIntegral <$> withPtrOut (glGetTexParameteriv target GL_TEXTURE_MIN_FILTER)
   s (TextureFilter f) = glTexParameteri target GL_TEXTURE_MIN_FILTER (fromIntegral f)
 
 -- | Controls the 'GL_TEXTURE_MAG_FILTER'.
 textureMagFilter :: TextureTarget -> StateVar TextureFilter
 textureMagFilter (TextureTarget _ target) = makeStateVar g s where
-  g = TextureFilter . fromIntegral <$> alloca (\p -> glGetTexParameteriv target GL_TEXTURE_MAG_FILTER p >> peek p)
+  g = TextureFilter . fromIntegral <$> withPtrOut (glGetTexParameteriv target GL_TEXTURE_MAG_FILTER)
   s (TextureFilter f) = glTexParameteri target GL_TEXTURE_MAG_FILTER (fromIntegral f)
 
 -- | Generates the mip maps.

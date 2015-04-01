@@ -33,7 +33,7 @@ instance Default VertexArray where
 -- 'GL_VERTEX_ARRAY_BINDING'.
 boundVertexArray :: StateVar VertexArray
 boundVertexArray = makeStateVar getva setva where
-  getva = VertexArray . fromIntegral <$> alloca (\p -> glGetIntegerv GL_VERTEX_ARRAY_BINDING p >> peek p)
+  getva = VertexArray . fromIntegral <$> withPtrOut (glGetIntegerv GL_VERTEX_ARRAY_BINDING)
   setva = glBindVertexArray . coerce
 
 -- | Changes the VAO for the duration of the supplied action.

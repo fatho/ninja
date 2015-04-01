@@ -19,6 +19,7 @@ import           Graphics.GL.Core33
 import           Graphics.GL.Types
 
 import           Ninja.GL.Object
+import           Ninja.Util
 
 -- | Shader stages available in OpenGL 3.x according to <https://www.opengl.org/wiki/Shader>
 data ShaderType
@@ -54,8 +55,8 @@ instance Object (Shader t) where
 compileShader :: Shader t -> IO (Bool, String)
 compileShader shader = do
   glCompileShader (objectId shader)
-  success <- (GL_FALSE /=) <$> alloca (\s -> glGetShaderiv (objectId shader) GL_COMPILE_STATUS s >> peek s)
-  logsize <- alloca $ \p -> glGetShaderiv (objectId shader) GL_INFO_LOG_LENGTH p >> peek p
+  success <- (GL_FALSE /=) <$> withPtrOut (glGetShaderiv (objectId shader) GL_COMPILE_STATUS)
+  logsize <- withPtrOut $ glGetShaderiv (objectId shader) GL_INFO_LOG_LENGTH
   logstr <- allocaBytes (fromIntegral logsize) $ \cstr -> do
               glGetShaderInfoLog (objectId shader) logsize nullPtr cstr
               peekCString cstr
@@ -64,7 +65,7 @@ compileShader shader = do
 -- | Returns the type of a shader.
 shaderType :: Shader t -> GettableStateVar ShaderType
 shaderType shader = makeGettableStateVar $
-  alloca (\p -> glGetShaderiv (objectId shader) GL_SHADER_TYPE p >> peek p) >>= \case
+  withPtrOut (glGetShaderiv (objectId shader) GL_SHADER_TYPE) >>= \case
     GL_VERTEX_SHADER -> return VertexShader
     GL_FRAGMENT_SHADER -> return FragmentShader
     GL_GEOMETRY_SHADER -> return GeometryShader
@@ -74,31 +75,23 @@ shaderType shader = makeGettableStateVar $
 shaderSource :: Shader t -> StateVar String
 shaderSource shader = makeStateVar g s where
   g = do
-    len <- alloca $ \p -> do
-        glGetShaderiv (objectId shader) GL_SHADER_SOURCE_LENGTH p
-        peek p
+    len <- withPtrOut $ glGetShaderiv (objectId shader) GL_SHADER_SOURCE_LENGTH
     allocaBytes (fromIntegral len) $ \cstr -> do
       glGetShaderSource (objectId shader) len nullPtr cstr
       peekCString cstr
   s str = withCString str $ \cstr ->
-    alloca $ \p -> do
-        poke p cstr
-        glShaderSource (objectId shader) 1 p nullPtr
+    withPtrIn cstr $ \p -> glShaderSource (objectId shader) 1 p nullPtr
 
 -- | Gets or sets the source code of a shader as a 'ByteString'.
 shaderSourceBytes :: Shader t -> StateVar BS.ByteString
 shaderSourceBytes shader = makeStateVar g s where
   g = do
-    len <- alloca $ \p -> do
-        glGetShaderiv (objectId shader) GL_SHADER_SOURCE_LENGTH p
-        peek p
+    len <- withPtrOut $ glGetShaderiv (objectId shader) GL_SHADER_SOURCE_LENGTH
     allocaBytes (fromIntegral len) $ \cstr -> do
       glGetShaderSource (objectId shader) len nullPtr cstr
       BS.packCString cstr
   s str = BSU.unsafeUseAsCString str $ \cstr ->
-    alloca $ \p -> do
-        poke p cstr
-        glShaderSource (objectId shader) 1 p nullPtr
+    withPtrIn cstr $ \p -> glShaderSource (objectId shader) 1 p nullPtr
 
 -- | Casts the shader to a fragment shader, if it is one.
 asFragmentShader :: Shader t -> IO (Maybe (Shader FragmentShader))

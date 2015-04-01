@@ -17,6 +17,7 @@ import           Graphics.GL.Core33
 import           Graphics.GL.Types
 
 import           Ninja.GL.Object
+import           Ninja.Util
 
 -- | Encapsulates an OpenGL buffer target.
 data BufferTarget = BufferTarget GLenum GLenum deriving (Eq, Ord, Show)
@@ -79,15 +80,13 @@ bufferSubData (BufferTarget _ t) off size = makeStateVar g s where
 
 -- | Returns the size of a buffer.
 bufferSize :: BufferTarget -> GettableStateVar GLsizeiptr
-bufferSize (BufferTarget _ t) = makeGettableStateVar $ alloca $ \p -> do
-  glGetBufferParameteriv t GL_BUFFER_SIZE p
-  fromIntegral <$> peek p
+bufferSize (BufferTarget _ t) = makeGettableStateVar $ 
+  fromIntegral <$> withPtrOut (glGetBufferParameteriv t GL_BUFFER_SIZE)
 
 -- | Returns the size of a buffer.
 bufferUsage :: BufferTarget -> GettableStateVar BufferUsage
-bufferUsage (BufferTarget _ t) = makeGettableStateVar $ alloca $ \p -> do
-  glGetBufferParameteriv t GL_BUFFER_USAGE p
-  BufferUsage . fromIntegral <$> peek p
+bufferUsage (BufferTarget _ t) = makeGettableStateVar $
+  BufferUsage . fromIntegral <$> withPtrOut (glGetBufferParameteriv t GL_BUFFER_USAGE)
 
 -- | The currently bound vertex array. It is set using 'glBindBuffer' and get using 'glGetIntegerv'.
 boundBuffer :: BufferTarget -> StateVar (Buffer a)

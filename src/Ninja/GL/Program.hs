@@ -22,6 +22,7 @@ import           Graphics.GL.Types
 
 import           Ninja.GL.Object
 import           Ninja.GL.Shader
+import           Ninja.Util
 
 -- | Shader Program object handle
 newtype Program = Program GLuint deriving (Eq, Ord, Show)
@@ -60,8 +61,8 @@ attachedShaders prog = makeStateVar g s where
 linkProgram :: Program -> IO (Bool, String)
 linkProgram prog = do
   glLinkProgram (objectId prog)
-  success <- (GL_FALSE /=) <$> alloca (\s -> glGetProgramiv (objectId prog) GL_LINK_STATUS s >> peek s)
-  logsize <- alloca $ \p -> glGetProgramiv (objectId prog) GL_INFO_LOG_LENGTH p >> peek p
+  success <- (GL_FALSE /=) <$> withPtrOut (glGetProgramiv (objectId prog) GL_LINK_STATUS)
+  logsize <- withPtrOut $ glGetProgramiv (objectId prog) GL_INFO_LOG_LENGTH
   logstr <- allocaBytes (fromIntegral logsize) $ \cstr -> do
               glGetProgramInfoLog (objectId prog) logsize nullPtr cstr
               peekCString cstr
@@ -70,13 +71,9 @@ linkProgram prog = do
 -- | The currently used shader program (see 'glUseProgram').
 usedProgram :: StateVar Program
 usedProgram = makeStateVar g s where
-  g = Program . fromIntegral <$> alloca (\p -> glGetIntegerv GL_CURRENT_PROGRAM p >> peek p)
+  g = Program . fromIntegral <$> withPtrOut (glGetIntegerv GL_CURRENT_PROGRAM)
   s = glUseProgram . objectId
 
 -- | Sets the shader program for the duration of the supplied action and restores it afterwards.
 withProgram :: Program -> IO a -> IO a
-withProgram prog action = do
-  oldProg <- get usedProgram
-  usedProgram $= prog
-  finally action
-    $ usedProgram $= oldProg
+withProgram = withVar usedProgram
