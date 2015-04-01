@@ -35,7 +35,7 @@ newtype UniformLoc a = UniformLoc GLint deriving (Eq, Ord, Show)
 uniformLocation :: Program -> String -> IO (UniformLoc a)
 uniformLocation prog name = do
   locId <- withCString name (glGetUniformLocation (objectId prog))
-  when (locId < 0) $ ioError $ userError "uniform not found"
+  when (locId < 0) $ ioError $ userError $ "uniform not found: " ++ name
   return $ UniformLoc locId
 
 -- | Returns a uniform of the given program.

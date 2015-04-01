@@ -3,13 +3,17 @@
 module Main where
 
 import qualified Codec.Picture        as JP
+import           Control.Applicative
 import           Control.Exception
 import           Control.Monad
 import           Control.Monad.Except
 import           Control.Monad.IfElse
 import           Data.Bits
 import qualified Data.ByteString      as BS
+import           Data.IORef
+import           Data.Maybe
 import           Foreign.Ptr
+import           Foreign.Storable
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
 import qualified Graphics.UI.GLFW     as GLFW
@@ -17,6 +21,8 @@ import           Linear
 import           System.Directory     as Dir
 
 import           Ninja.GL
+import           Ninja.Particles
+import           Ninja.Sprite
 
 ngon :: Int -> GLfloat -> [V3 GLfloat]
 ngon n radius = map mkV [0..n-1] where
@@ -28,6 +34,25 @@ testBuffer =
   [ V3 (-1.0) (-1.0) 0.0
   , V3   1.0  (-1.0) 0.0
   , V3   0.0    1.0  0.0
+  ]
+
+data PosTex = PosTex
+  { vertexPos :: V3 Float
+  , vertexTex :: V2 Float
+  }
+
+instance Storable PosTex where
+  sizeOf _ = sizeOf (undefined :: V3 Float) + sizeOf (undefined :: V2 Float)
+  alignment = sizeOf
+  peek ptr = PosTex <$> peek (castPtr ptr) <*> peekByteOff ptr (sizeOf (undefined :: V3 Float))
+  poke ptr (PosTex p t) = poke (castPtr ptr) p >> pokeByteOff ptr (sizeOf (undefined :: V3 Float)) t
+
+testSquare :: [PosTex]
+testSquare =
+  [ PosTex (V3 (-1.0) (-1.0) 0.0) (V2 0 0)
+  , PosTex (V3   1.0  (-1.0) 0.0) (V2 1 0)
+  , PosTex (V3   1.0    1.0  0.0) (V2 1 1)
+  , PosTex (V3 (-1.0)   1.0  0.0) (V2 0 1)
   ]
 
 loadShaders :: FilePath -> FilePath -> IO Program
@@ -64,56 +89,19 @@ loadShaders vertPath fragPath = do
 
 main :: IO ()
 main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
-    vao  <- gen1
-    vbuf <- gen1
-    boundVertexArray        $= vao
-    boundBuffer ArrayBuffer $= vbuf
-    bufferData ArrayBuffer  $= (StaticDraw, ngon 4 1)
+    glEnable GL_TEXTURE_2D
 
-    prog <- loadShaders "data/shaders/vert.glsl" "data/shaders/frag.glsl"
-    fillColorUniform <- uniformOf prog "fill_color"
-    modelMatUniform  <- uniformOf prog "model_matrix"
-    viewMatUniform   <- uniformOf prog "view_matrix"
-
-    vertexPos <- attributeOf prog "vertexPos"
-    vertexTex <- attributeOf prog "texCoord"
-
-    Right tex <- JP.readImage "data/tex/foo.png"
-
-    textureImage2D Texture2D 0 GL_RGBA tex
+    batch <- initSpriteBatch 10
+    sprite <- loadSprite "data/tex/explosion.png" (V2 1 1) (V3 (-0.5) (-0.5) 0)
+    print sprite
 
     untilM (GLFW.windowShouldClose win) $ do
-      (fw, fh) <- GLFW.getFramebufferSize win
-      let ratio = fromIntegral fw / fromIntegral fh
-      glViewport 0 0 (fromIntegral fw) (fromIntegral fh)
       glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
 
-      Just time <- GLFW.getTime
-
-      withProgram prog $ do
-        viewMatUniform  $= (ortho (-ratio) ratio 1 (-1) (-100) 100 :: M44 Float)
-        modelMatUniform $= (mkTransformation
-          (axisAngle (V3 0 0 1) (realToFrac time)) 0 :: M44 Float)
-        fillColorUniform $=
-          (V3 (realToFrac $ (sin (2 * time) + 1) / 2)
-              (realToFrac $ (sin time + 1) / 2)
-              (realToFrac $ (sin (3 * time) + 1) / 2)
-              :: V3 Float)
-
-        attribEnabled vertexPos $= True
-        boundBuffer ArrayBuffer $= vbuf
-        attribEnabled vertexTex $= True
-        attribLayout vertexPos $= VertexLayout 3 GL_FLOAT False 0 0
-        attribLayout vertexTex $= VertexLayout 2 GL_FLOAT False 0 12
-
-        glDrawArrays GL_TRIANGLE_FAN 0 4
-
-        attribEnabled vertexPos $= False
+      draw batch sprite
 
       GLFW.swapBuffers win
       GLFW.pollEvents
-    delete1 vbuf
-    delete1 vao
   where
     hints = GLFW.WindowHint'Samples 4 : openGL33Core
 

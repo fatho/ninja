@@ -12,6 +12,7 @@ import           Graphics.GL.Core33
 import           Graphics.GL.Types
 
 import           Ninja.GL.Object
+import           Ninja.Util
 
 -- | Vertex Array Handle.
 newtype VertexArray = VertexArray GLuint deriving (Eq, Ord, Show)
@@ -34,3 +35,7 @@ boundVertexArray :: StateVar VertexArray
 boundVertexArray = makeStateVar getva setva where
   getva = VertexArray . fromIntegral <$> alloca (\p -> glGetIntegerv GL_VERTEX_ARRAY_BINDING p >> peek p)
   setva = glBindVertexArray . coerce
+
+-- | Changes the VAO for the duration of the supplied action.
+withVertexArray :: VertexArray -> IO a -> IO a
+withVertexArray = withVar boundVertexArray

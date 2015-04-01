@@ -46,6 +46,13 @@ class BufferData a where
   -- | Provide a buffer of the given size for the data to be read into.
   fromRawData :: MonadIO m => GLsizeiptr -> (Ptr () -> IO ()) -> m a
 
+-- | Buffer data with a size but without actual data.
+data NullData = NullData GLsizeiptr
+
+instance BufferData NullData where
+  withRawData (NullData size) f = liftIO $ f size nullPtr
+  fromRawData size f = liftIO (f nullPtr) >> return (NullData size)
+
 instance Storable a => BufferData (VS.Vector a) where
   withRawData vs f = liftIO $ VS.unsafeWith vs $ \p -> f (fromIntegral $ VS.length vs * sizeOf (undefined :: a)) (castPtr p)
   fromRawData size f = liftIO $ do

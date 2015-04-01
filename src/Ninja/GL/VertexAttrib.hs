@@ -63,5 +63,7 @@ attribLayout va = makeStateVar g s where
                 (fromIntegral $ attribStride layout)
                 (intPtrToPtr  $ attribPointer layout)
 
+-- | Values that can be used as vertex data to be streamed to the graphics card.
 class Storable a => VertexData a where
-
+  -- | Returns the vertex layout of the given data. The first argument is not used.
+  vertexLayout :: a -> [VertexLayout]

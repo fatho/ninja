@@ -1,11 +1,11 @@
 #version 330 core
 
-in vec2 texCoord;
-out vec3 color;
+in vec2 texCoord_frag;
+out vec4 color;
 
-uniform vec3 fill_color;
- 
+uniform vec4 tint_color;
+uniform sampler2D tex;
+
 void main() {
-    color.b = fill_color.b;
-    color.rg = texCoord;
+    color = texture(tex, texCoord_frag) * tint_color;
 }

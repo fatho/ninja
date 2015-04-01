@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE LambdaCase             #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE PatternSynonyms        #-}
 {-# LANGUAGE TypeFamilies           #-}
@@ -26,11 +27,15 @@ import           Graphics.GL.Core33
 import           Graphics.GL.Types
 import           Linear
 
+import Ninja.Util
 import           Ninja.GL.Object
 import           Ninja.GL.Types
 
 -- | Encapsulates an OpenGL texture target.
 data TextureTarget = TextureTarget GLenum GLenum deriving (Eq, Ord, Show)
+
+-- | Type of a texture unit 'GL_TEXTURE0', 'GL_TEXTURE1', ...
+type TextureUnit = GLenum
 
 -- | Texture handle
 newtype Texture = Texture GLuint deriving (Eq, Ord, Show)
@@ -48,16 +53,40 @@ instance Default Texture where
   def = Texture 0
 
 -- | Controls the currently active texture unit.
-activeTexture :: StateVar GLenum
+activeTexture :: StateVar TextureUnit
 activeTexture = makeStateVar g s where
   g = fromIntegral <$> alloca (\p -> glGetIntegerv GL_ACTIVE_TEXTURE p >> peek p)
   s = glActiveTexture
+
+-- | Changes the texture unit for the duration of the supplied action.
+withActiveTexture :: TextureUnit -> IO a -> IO a
+withActiveTexture = withVar activeTexture
 
 -- | Controls the currently bound texture for a texture target.
 boundTexture :: TextureTarget -> StateVar Texture
 boundTexture (TextureTarget binding target) = makeStateVar g s where
   g = Texture . fromIntegral <$> alloca (\p -> glGetIntegerv binding p >> peek p)
   s tex = glBindTexture target (objectId tex)
+
+-- | Changes the texture for the duration of the supplied action.
+withTexture :: TextureTarget -> Texture -> IO a -> IO a
+withTexture target = withVar (boundTexture target)
+
+-- * Textures from file
+
+-- | Loads a texture from a file using 'JP.readImage'.
+textureFromFile :: FilePath -> IO Texture
+textureFromFile path = do
+  img <- JP.readImage path >>= \case
+    Left err -> ioError $ userError $ "failed to load image: " ++ err
+    Right x -> return x
+  tex <- gen1
+  withTexture Texture2D tex $ do
+    textureImage2D Texture2D 0 GL_RGB img
+    textureWrap2D Texture2D $= (WrapClampToEdge, WrapClampToEdge)
+    textureMinFilter Texture2D $= FilterNearest
+    textureMagFilter Texture2D $= FilterNearest
+  return tex
 
 -- * Texture Image
 
