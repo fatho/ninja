@@ -8,6 +8,7 @@ import qualified Data.ByteString        as BS
 import qualified Data.ByteString.Unsafe as BSU
 import           Data.Coerce
 import           Data.Default.Class
+import           Data.Monoid
 import           Data.StateVar
 import qualified Data.Vector.Storable   as VS
 import           Foreign.C.String
@@ -38,14 +39,14 @@ attributeOf prog name = do
   return $ VertexAttrib $ fromIntegral loc
 
 -- | Layout of a vertex attribute.
-data VertexLayout = VertexLayout
+data VertexAttribLayout = VertexAttribLayout
   { attribSize      :: Int
   , attribType      :: GLenum
   , attribNormalize :: Bool
   , attribStride    :: Int
   , attribPointer   :: IntPtr
   }
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show, Read)
 
 -- | Controls if a vertex attribute is enabled.
 attribEnabled :: VertexAttrib -> StateVar Bool
@@ -54,7 +55,7 @@ attribEnabled va = makeStateVar g s where
   s True  = glEnableVertexAttribArray (coerce va)
   s False = glDisableVertexAttribArray (coerce va)
 
-attribLayout :: VertexAttrib -> StateVar VertexLayout
+attribLayout :: VertexAttrib -> StateVar VertexAttribLayout
 attribLayout va = makeStateVar g s where
   g = undefined
   s layout = glVertexAttribPointer (coerce va)
@@ -64,7 +65,28 @@ attribLayout va = makeStateVar g s where
                 (fromIntegral $ attribStride layout)
                 (intPtrToPtr  $ attribPointer layout)
 
+data VertexLayout = VertexLayout
+  { vertexSize :: Int
+  , vertexAttribs :: [VertexAttribInfo]
+  }
+  deriving (Eq, Ord, Show, Read)
+
+data AttribLocation = AttribByName String | AttribByOrd Int
+  deriving (Eq, Ord, Show, Read)
+
+data VertexAttribInfo = VertexAttribInfo
+  { vertexAttribLocation :: AttribLocation
+  , vertexAttribLayout :: VertexAttribLayout
+  }
+  deriving (Eq, Ord, Show, Read)
+
+instance Monoid VertexLayout where
+
 -- | Values that can be used as vertex data to be streamed to the graphics card.
 class Storable a => VertexData a where
   -- | Returns the vertex layout of the given data. The first argument is not used.
   vertexLayout :: a -> [VertexLayout]
+
+
+class GVertexData a where
+  gvertexLayout :: a -> [VertexLayout]

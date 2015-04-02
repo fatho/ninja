@@ -15,5 +15,5 @@ data ShaderException
   | ProgramLinkError String
   deriving (Eq, Ord, Show, Typeable, Data)
 
-instance Exception GLException
 instance Exception ShaderException
+instance Exception GLException

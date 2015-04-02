@@ -8,6 +8,7 @@ import           Control.Exception
 import           Control.Monad
 import           Control.Monad.Except
 import           Control.Monad.IfElse
+import           Control.Monad.Trans.Resource
 import           Data.Bits
 import qualified Data.ByteString      as BS
 import           Data.IORef
@@ -67,18 +68,24 @@ main :: IO ()
 main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
     glEnable GL_TEXTURE_2D
 
+    putStrLn "initialization"
+    renderer <- newSpriteRenderer
+
     {-batch <- initSpriteBatch 10
     sprite <- loadSprite "data/tex/explosion.png" (V2 1 1) (V3 (-0.5) (-0.5) 0)
     print sprite
     -}
+    putStrLn "Begin Loop"
     untilM (GLFW.windowShouldClose win) $ do
       glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
       {-
       draw batch sprite
+      -}
 
       GLFW.swapBuffers win
-      -}
       GLFW.pollEvents
+    putStrLn "Exit"
+    deleteSpriteRenderer renderer
   where
     hints = GLFW.WindowHint'Samples 4 : openGL33Core
 
