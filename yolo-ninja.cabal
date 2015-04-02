@@ -20,6 +20,7 @@ executable yolo-ninja
   main-is:              Main.hs
   other-modules:        Ninja.GL
                         Ninja.GL.Buffer
+                        Ninja.GL.Exception
                         Ninja.GL.Object
                         Ninja.GL.Shader
                         Ninja.GL.Types
@@ -27,6 +28,7 @@ executable yolo-ninja
                         Ninja.GL.Uniform
                         Ninja.GL.VertexArray
                         Ninja.GL.VertexAttrib
+                        Ninja.GL2D.Sprite
                         Ninja.Util
                         Ninja.Particles
                         Ninja.Types
@@ -47,5 +49,6 @@ executable yolo-ninja
                       , JuicyPixels
                       , raw-strings-qq
                       , containers
+                      , resourcet
   hs-source-dirs:       src
   default-language:     Haskell2010

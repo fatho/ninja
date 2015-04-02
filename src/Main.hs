@@ -22,7 +22,7 @@ import           System.Directory     as Dir
 
 import           Ninja.GL
 import           Ninja.Particles
-import           Ninja.Sprite
+import           Ninja.GL2D.Sprite
 
 ngon :: Int -> GLfloat -> [V3 GLfloat]
 ngon n radius = map mkV [0..n-1] where
@@ -60,47 +60,24 @@ loadShaders vertPath fragPath = do
   putStrLn "Loading source from files"
   vertSource <- BS.readFile vertPath
   fragSource <- BS.readFile fragPath
-  putStrLn "Creating shader objects"
-  vertShader <- gen1 :: IO (Shader VertexShader)
-  fragShader <- gen1 :: IO (Shader FragmentShader)
-  putStrLn "Feeding source to shaders"
-  shaderSourceBytes vertShader $= vertSource
-  shaderSourceBytes fragShader $= fragSource
-  putStrLn "Compiling vertex shader"
-  (success, msg) <- compileShader vertShader
-  putStrLn msg
-  unless success $ ioError $ userError "failed to compile vertex shader"
-  putStrLn "Compiling fragment shader"
-  (success, msg) <- compileShader fragShader
-  putStrLn msg
-  unless success $ ioError $ userError "failed to compile fragment shader"
-  putStrLn "Creating program"
-  prog <- gen1
-  attachShader prog vertShader
-  attachShader prog fragShader
-  putStrLn "Linking program"
-  (success, msg) <- linkProgram prog
-  putStrLn msg
-  unless success $ ioError $ userError "failed to link program"
-  attachedShaders prog $= []
-  delete1 vertShader
-  delete1 fragShader
+  prog <- createProgramFromSource [vertSource] [] [fragSource]
   return prog
 
 main :: IO ()
 main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
     glEnable GL_TEXTURE_2D
 
-    batch <- initSpriteBatch 10
+    {-batch <- initSpriteBatch 10
     sprite <- loadSprite "data/tex/explosion.png" (V2 1 1) (V3 (-0.5) (-0.5) 0)
     print sprite
-
+    -}
     untilM (GLFW.windowShouldClose win) $ do
       glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
-
+      {-
       draw batch sprite
 
       GLFW.swapBuffers win
+      -}
       GLFW.pollEvents
   where
     hints = GLFW.WindowHint'Samples 4 : openGL33Core

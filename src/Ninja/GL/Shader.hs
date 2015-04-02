@@ -6,7 +6,10 @@
 module Ninja.GL.Shader where
 
 import           Control.Applicative
+import           Control.Exception
 import           Control.Monad
+import           Control.Monad.IO.Class
+import           Control.Monad.Trans.Resource
 import qualified Data.ByteString        as BS
 import qualified Data.ByteString.Unsafe as BSU
 import           Data.Coerce
@@ -18,41 +21,28 @@ import           Foreign.Storable
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
 
+import           Ninja.GL.Exception
 import           Ninja.GL.Object
 import           Ninja.Util
 
--- | Shader stages available in OpenGL 3.x according to <https://www.opengl.org/wiki/Shader>
-data ShaderType
-  = FragmentShader
-  | VertexShader
-  | GeometryShader
-  | Unknown
-  deriving (Eq, Ord, Show, Read, Enum, Bounded)
-
 -- | Shader object
---newtype Shader t = Shader GLuint deriving (Eq, Ord, Show)
+newtype Shader = Shader GLuint deriving (Eq, Ord, Show)
 
-newtype Shader (t :: ShaderType) = Shader GLuint deriving (Eq, Ord, Show)
+type ShaderType = GLenum
 
-instance GenObject (Shader FragmentShader) where
-  gen1 = Shader `liftM` glCreateShader GL_FRAGMENT_SHADER
+-- | Create a shader of the given type.
+createShader :: ShaderType -> IO Shader
+createShader ty = do
+  shId <- glCreateShader ty
+  when (shId == 0) $ throw $ ObjectCreationFailed "Shader"
+  return $ Shader shId
 
-instance GenObject (Shader VertexShader) where
-  gen1 = Shader `liftM` glCreateShader GL_VERTEX_SHADER
-
-instance GenObject (Shader GeometryShader) where
-  gen1 = Shader `liftM` glCreateShader GL_GEOMETRY_SHADER
-
--- | Create a shader with a type not contained in the 'ShaderType' enum.
-createShader :: GLenum -> IO (Shader Unknown)
-createShader ty = liftM Shader $ glCreateShader ty
-
-instance Object (Shader t) where
+instance Object Shader where
   objectId = coerce
   delete1  = glDeleteShader . objectId
 
--- | Tries to compile a shader using 'glCompileShader'. Returns a boolean indicating success or failure and the shader log.
-compileShader :: Shader t -> IO (Bool, String)
+-- | Tries to compile a shader using 'glCompileShader'.
+compileShader :: Shader -> IO ()
 compileShader shader = do
   glCompileShader (objectId shader)
   success <- (GL_FALSE /=) <$> withPtrOut (glGetShaderiv (objectId shader) GL_COMPILE_STATUS)
@@ -60,59 +50,43 @@ compileShader shader = do
   logstr <- allocaBytes (fromIntegral logsize) $ \cstr -> do
               glGetShaderInfoLog (objectId shader) logsize nullPtr cstr
               peekCString cstr
-  return (success, logstr)
+  unless success $ throw $ ShaderCompileError logstr
 
 -- | Returns the type of a shader.
-shaderType :: Shader t -> GettableStateVar ShaderType
-shaderType shader = makeGettableStateVar $
-  withPtrOut (glGetShaderiv (objectId shader) GL_SHADER_TYPE) >>= \case
-    GL_VERTEX_SHADER -> return VertexShader
-    GL_FRAGMENT_SHADER -> return FragmentShader
-    GL_GEOMETRY_SHADER -> return GeometryShader
-    o                  -> return Unknown
+shaderType :: Shader -> GettableStateVar ShaderType
+shaderType shader = makeGettableStateVar $ 
+  fromIntegral <$> withPtrOut (glGetShaderiv (objectId shader) GL_SHADER_TYPE)
+
+class ShaderSource a where
+  withSourcePtr :: a -> (CStringLen -> IO b) -> IO b
+  fromSourcePtr :: CStringLen -> IO a
+
+instance ShaderSource String where
+  withSourcePtr = withCStringLen
+  fromSourcePtr = peekCStringLen
+
+instance ShaderSource BS.ByteString where
+  withSourcePtr = BSU.unsafeUseAsCStringLen
+  fromSourcePtr = BS.packCStringLen
 
 -- | Gets or sets the source code of a shader.
-shaderSource :: Shader t -> StateVar String
+shaderSource :: ShaderSource a => Shader -> StateVar a
 shaderSource shader = makeStateVar g s where
   g = do
     len <- withPtrOut $ glGetShaderiv (objectId shader) GL_SHADER_SOURCE_LENGTH
     allocaBytes (fromIntegral len) $ \cstr -> do
-      glGetShaderSource (objectId shader) len nullPtr cstr
-      peekCString cstr
-  s str = withCString str $ \cstr ->
-    withPtrIn cstr $ \p -> glShaderSource (objectId shader) 1 p nullPtr
+      actualLen <- withPtrOut $ \plenOut -> glGetShaderSource (objectId shader) len plenOut cstr
+      fromSourcePtr (cstr, fromIntegral actualLen)
+  s src = withSourcePtr src $ \(cstr,len) ->
+    withPtrIn cstr $ \psrc -> 
+    withPtrIn (fromIntegral len) $ \plen -> glShaderSource (objectId shader) 1 psrc plen
 
--- | Gets or sets the source code of a shader as a 'ByteString'.
-shaderSourceBytes :: Shader t -> StateVar BS.ByteString
-shaderSourceBytes shader = makeStateVar g s where
-  g = do
-    len <- withPtrOut $ glGetShaderiv (objectId shader) GL_SHADER_SOURCE_LENGTH
-    allocaBytes (fromIntegral len) $ \cstr -> do
-      glGetShaderSource (objectId shader) len nullPtr cstr
-      BS.packCString cstr
-  s str = BSU.unsafeUseAsCString str $ \cstr ->
-    withPtrIn cstr $ \p -> glShaderSource (objectId shader) 1 p nullPtr
-
--- | Casts the shader to a fragment shader, if it is one.
-asFragmentShader :: Shader t -> IO (Maybe (Shader FragmentShader))
-asFragmentShader = castShader FragmentShader
-
--- | Casts the shader to a vertex shader, if it is one.
-asVertexShader :: Shader t -> IO (Maybe (Shader VertexShader))
-asVertexShader = castShader VertexShader
-
--- | Casts the shader to a geometry shader, if it is one.
-asGeometryShader :: Shader t -> IO (Maybe (Shader GeometryShader))
-asGeometryShader = castShader GeometryShader
-
--- | Forgets the type information about the shader.
-asUnknownShader :: Shader t -> Shader Unknown
-asUnknownShader = coerce
-
--- | Tries to cast a shader to the desired type.
-castShader :: ShaderType -> Shader t -> IO (Maybe (Shader t'))
-castShader targetType shader = do
-  sourceType <- get $ shaderType shader
-  if targetType == Unknown || sourceType == targetType
-    then return $ Just $ coerce shader
-    else return Nothing
+-- | Creates a new shader object, loads the source code and compiles.
+-- Throws an exception on failure.
+createShaderFromSource :: (MonadResource m, ShaderSource a) => ShaderType -> a -> m (ReleaseKey,Shader)
+createShaderFromSource shtype src = do
+  (rkey, shd) <- allocate (createShader shtype) delete1
+  liftIO $ do
+    shaderSource shd $= src
+    compileShader shd
+  return (rkey,shd)
