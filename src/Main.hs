@@ -61,8 +61,7 @@ loadShaders vertPath fragPath = do
   putStrLn "Loading source from files"
   vertSource <- BS.readFile vertPath
   fragSource <- BS.readFile fragPath
-  prog <- createProgramFromSource [vertSource] [] [fragSource]
-  return prog
+  createProgramFromSource [vertSource] [] [fragSource]
 
 main :: IO ()
 main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do

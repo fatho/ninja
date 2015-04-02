@@ -36,6 +36,7 @@ import           System.IO.Unsafe       (unsafePerformIO)
 import           Text.RawString.QQ
 
 import           Ninja.GL
+import           Ninja.Storable.Generics
 
 data SpriteVertex = SpriteVertex
   { spriteVertexPos      :: V3 Float
@@ -44,6 +45,13 @@ data SpriteVertex = SpriteVertex
   , spriteVertexUVExtend :: V2 Float
   }
   deriving (Eq, Ord, Show, Read, Typeable, Data, Generic)
+
+instance Storable SpriteVertex where
+  sizeOf = genericSizeOf
+  alignment = genericAlignment
+  peek = genericPeek
+  poke = genericPoke
+instance VertexData SpriteVertex
 
 data SpriteRenderer = SpriteRenderer
   { spriteRendererProgram :: Program

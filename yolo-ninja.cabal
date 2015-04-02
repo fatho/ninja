@@ -29,6 +29,7 @@ executable yolo-ninja
                         Ninja.GL.VertexArray
                         Ninja.GL.VertexAttrib
                         Ninja.GL2D.Sprite
+                        Ninja.Storable.Generics
                         Ninja.Util
                         Ninja.Particles
                         Ninja.Types

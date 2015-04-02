@@ -20,5 +20,6 @@ withVar var val act = do
 withPtrOut :: (MonadIO m, Storable a) => (Ptr a -> IO ()) -> m a
 withPtrOut f = liftIO $ alloca $ liftM2 (>>) f peek
 
+-- | Allocates memory, copies the supplied value to that location and passes the pointer to the given function.
 withPtrIn :: Storable a => a -> (Ptr a -> IO b) -> IO b
 withPtrIn v f = alloca $ \p -> poke p v >> f p

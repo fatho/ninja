@@ -1,7 +1,14 @@
+{-# LANGUAGE DefaultSignatures   #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeOperators       #-}
 module Ninja.GL.VertexAttrib where
 
 import           Control.Applicative
 import           Control.Exception
+import           Control.Lens           hiding (coerce, from)
 import           Control.Monad
 import           Control.Monad.IO.Class
 import qualified Data.ByteString        as BS
@@ -17,8 +24,11 @@ import           Foreign.Marshal.Alloc
 import           Foreign.Marshal.Array
 import           Foreign.Ptr
 import           Foreign.Storable
+import           GHC.Generics           (Generic, Rep)
+import qualified GHC.Generics           as Generics
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
+import           Linear
 
 import           Ninja.GL.Object
 import           Ninja.GL.Program
@@ -40,13 +50,15 @@ attributeOf prog name = do
 
 -- | Layout of a vertex attribute.
 data VertexAttribLayout = VertexAttribLayout
-  { attribSize      :: Int
-  , attribType      :: GLenum
-  , attribNormalize :: Bool
-  , attribStride    :: Int
-  , attribPointer   :: IntPtr
+  { _attribSize      :: Int
+  , _attribType      :: GLenum
+  , _attribNormalize :: Bool
+  , _attribStride    :: Int
+  , _attribPointer   :: IntPtr
   }
   deriving (Eq, Ord, Show, Read)
+
+makeLenses ''VertexAttribLayout
 
 -- | Controls if a vertex attribute is enabled.
 attribEnabled :: VertexAttrib -> StateVar Bool
@@ -59,34 +71,82 @@ attribLayout :: VertexAttrib -> StateVar VertexAttribLayout
 attribLayout va = makeStateVar g s where
   g = undefined
   s layout = glVertexAttribPointer (coerce va)
-                (fromIntegral $ attribSize layout)
-                (fromIntegral $ attribType layout)
-                (toGLBool $ attribNormalize layout)
-                (fromIntegral $ attribStride layout)
-                (intPtrToPtr  $ attribPointer layout)
+                (fromIntegral $ view attribSize layout)
+                (fromIntegral $ view attribType layout)
+                (toGLBool $ view attribNormalize layout)
+                (fromIntegral $ view attribStride layout)
+                (intPtrToPtr  $ view attribPointer layout)
 
 data VertexLayout = VertexLayout
-  { vertexSize :: Int
-  , vertexAttribs :: [VertexAttribInfo]
+  { _vertexSize    :: Int
+  , _vertexAttribs :: [VertexAttribLayout]
   }
   deriving (Eq, Ord, Show, Read)
-
+{-
 data AttribLocation = AttribByName String | AttribByOrd Int
   deriving (Eq, Ord, Show, Read)
 
 data VertexAttribInfo = VertexAttribInfo
-  { vertexAttribLocation :: AttribLocation
-  , vertexAttribLayout :: VertexAttribLayout
+  { _vertexAttribLocation :: AttribLocation
+  , _vertexAttribLayout   :: VertexAttribLayout
   }
   deriving (Eq, Ord, Show, Read)
 
+makeLenses ''VertexAttribInfo
+-}
+
+makeLenses ''VertexLayout
+
 instance Monoid VertexLayout where
+  mempty = VertexLayout 0 []
+  mappend vl1 vl2 = VertexLayout
+    { _vertexSize = view vertexSize vl1 + view vertexSize vl2
+    , _vertexAttribs = view vertexAttribs vl1 ++ map (withOffset $ view vertexSize vl1) (view vertexAttribs vl2)
+    }
+
+-- | Applies an offset to a vertex attribute.
+withOffset :: Int -> VertexAttribLayout -> VertexAttribLayout
+withOffset off vinf = vinf & attribStride +~ off
+                           & attribPointer +~ fromIntegral off
 
 -- | Values that can be used as vertex data to be streamed to the graphics card.
 class Storable a => VertexData a where
   -- | Returns the vertex layout of the given data. The first argument is not used.
-  vertexLayout :: a -> [VertexLayout]
+  vertexLayout :: a -> VertexLayout
+  default vertexLayout :: (Generic a, GVertexData (Rep a)) => a -> VertexLayout
+  vertexLayout = gvertexLayout . Generics.from
 
+class GVertexData f where
+  gvertexLayout :: f p -> VertexLayout
 
-class GVertexData a where
-  gvertexLayout :: a -> [VertexLayout]
+instance GVertexData Generics.U1 where
+  gvertexLayout _ = mempty
+
+instance (GVertexData f, GVertexData g) => GVertexData (f Generics.:*: g) where
+  gvertexLayout _ = gvertexLayout x <> gvertexLayout y where
+    x = undefined :: f p
+    y = undefined :: g p
+
+instance VertexData c => GVertexData (Generics.K1 i c) where
+  gvertexLayout _ = vertexLayout (undefined :: c)
+
+instance GVertexData f => GVertexData (Generics.M1 i t f) where
+  gvertexLayout _ = gvertexLayout (undefined :: f p)
+
+storableVertexLayout :: Storable a => GLenum -> Int -> a -> VertexLayout
+storableVertexLayout dataType num x = VertexLayout (sizeOf x) [VertexAttribLayout num dataType False (sizeOf x) 0]
+
+instance VertexData Float where
+  vertexLayout = storableVertexLayout GL_FLOAT 1
+
+instance VertexData (V1 Float) where
+  vertexLayout = storableVertexLayout GL_FLOAT 1
+
+instance VertexData (V2 Float) where
+  vertexLayout = storableVertexLayout GL_FLOAT 2
+
+instance VertexData (V3 Float) where
+  vertexLayout = storableVertexLayout GL_FLOAT 3
+
+instance VertexData (V4 Float) where
+  vertexLayout = storableVertexLayout GL_FLOAT 4
