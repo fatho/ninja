@@ -1,27 +1,28 @@
-{-# LANGUAGE DataKinds       #-}
-{-# LANGUAGE LambdaCase      #-}
-{-# LANGUAGE QuasiQuotes     #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DataKinds          #-}
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE LambdaCase         #-}
+{-# LANGUAGE QuasiQuotes        #-}
+{-# LANGUAGE RecordWildCards    #-}
 module Ninja.GL2D.Sprite where
 
-import qualified Codec.Picture          as JP
+import qualified Codec.Picture           as JP
 import           Control.Applicative
 import           Control.Arrow
 import           Control.Exception
+import           Control.Lens
 import           Control.Monad
 import           Control.Monad.IO.Class
-import qualified Data.ByteString        as BS
-import qualified Data.ByteString.Unsafe as BSU
+import qualified Data.ByteString         as BS
+import qualified Data.ByteString.Unsafe  as BSU
 import           Data.Coerce
 import           Data.Data
 import           Data.Default.Class
 import           Data.IORef
-import qualified Data.List              as List
+import qualified Data.List               as List
 import           Data.Ord
 import           Data.StateVar
-import qualified Data.Vector.Storable   as VS
+import qualified Data.Vector.Storable    as VS
 import           Foreign.C.String
 import           Foreign.ForeignPtr
 import           Foreign.Marshal.Alloc
@@ -32,7 +33,7 @@ import           GHC.Generics
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
 import           Linear
-import           System.IO.Unsafe       (unsafePerformIO)
+import           System.IO.Unsafe        (unsafePerformIO)
 import           Text.RawString.QQ
 
 import           Ninja.GL
@@ -46,6 +47,10 @@ data SpriteVertex = SpriteVertex
   }
   deriving (Eq, Ord, Show, Read, Typeable, Data, Generic)
 
+-- | Size of the SpriteVertex data.
+spriteVertexSize :: Int
+spriteVertexSize = sizeOf (undefined :: SpriteVertex)
+
 instance Storable SpriteVertex where
   sizeOf = genericSizeOf
   alignment = genericAlignment
@@ -55,22 +60,59 @@ instance VertexData SpriteVertex
 
 data SpriteRenderer = SpriteRenderer
   { spriteRendererProgram :: Program
+  , spriteRendererVAO     :: VertexArray
+  , spriteRendererBuffer  :: Buffer SpriteVertex
+  , spriteRendererMVP     :: Uniform (M44 Float)
+  , spriteRendererSampler :: Uniform GLint
+  , spriteRendererSize    :: Int
   }
 
-newSpriteRenderer :: IO SpriteRenderer
-newSpriteRenderer = do
+newSpriteRenderer :: Int -> IO SpriteRenderer
+newSpriteRenderer nmax = do
   prog <- createProgramFromSource [vertexShaderSource] [geometryShaderSource] [fragmentShaderSource]
-  return $ SpriteRenderer prog
+  putStr "is a prog: " >> isA prog >>= print
+  mvp <- uniformOf prog "mvp"
+  tex <- uniformOf prog "tex"
+  vao <- gen1
+  buf <- gen1
+  withVertexArray vao $ do
+    boundBuffer ArrayBuffer $= buf
+    -- preallocate a buffer on the GPU
+    putStrLn $ "allocating buffer of size " ++ show (nmax * spriteVertexSize) ++ " B"
+    bufferData ArrayBuffer $= (StreamDraw, NullData (fromIntegral $ nmax * spriteVertexSize))
+    putStrLn "applying layout"
+    let layout = vertexLayout (undefined :: SpriteVertex)
+    mapM_ print (view vertexAttribs layout)
+    applyLayout layout
+  return $ SpriteRenderer prog vao buf mvp tex nmax
 
 deleteSpriteRenderer :: SpriteRenderer -> IO ()
 deleteSpriteRenderer SpriteRenderer{..} = delete1 spriteRendererProgram
+
+drawWithTexture :: SpriteRenderer -> Texture -> [SpriteVertex] -> IO ()
+drawWithTexture SpriteRenderer{..} tex sprites =
+    withProgram spriteRendererProgram $
+    withVertexArray spriteRendererVAO $ do
+       boundBuffer ArrayBuffer $= spriteRendererBuffer
+       spriteRendererMVP $= eye4
+       activeTexture $= GL_TEXTURE0
+       boundTexture Texture2D $= tex
+       go sprites
+  where
+    go [] = return ()
+    go sps = do
+        let (now, later) = List.splitAt spriteRendererSize sps
+            numElems     = length now
+        bufferSubData ArrayBuffer 0 (fromIntegral $ numElems * spriteVertexSize) $= now
+        glDrawArrays GL_POINTS 0 (fromIntegral numElems)
+        go later
 
 -- = Source code of the sprite rendering shaders.
 
 vertexShaderSource :: String
 vertexShaderSource = [r|#version 330 core
 
-layout(location=0) in vec4 spritePos;
+layout(location=0) in vec3 spritePos;
 layout(location=1) in vec2 spriteExtend;
 layout(location=2) in vec2 spriteUV;
 layout(location=3) in vec2 spriteUVExtend;
@@ -80,6 +122,10 @@ out vec2 spriteUV_g;
 out vec2 spriteUVExtend_g;
 
 void main() {
+  gl_Position = vec4(spritePos, 1);
+  spriteExtend_g = spriteExtend;
+  spriteUV_g = spriteUV;
+  spriteUVExtend_g = spriteUVExtend;
 }
 |]
 
@@ -89,37 +135,38 @@ geometryShaderSource = [r|#version 330 core
 layout(points) in;
 layout(triangle_strip, max_vertices = 4) out;
 
-in VertexData {
-  vec2 spriteExtend_g;
-  vec2 spriteUV_g;
-  vec2 spriteUVExtend_g;
-} VertexIn[1];
+in vec2 spriteExtend_g[];
+in vec2 spriteUV_g[];
+in vec2 spriteUVExtend_g[];
 
-out FragmentData {
-    vec2 texCoord;
-} VertexOut;
+out vec2 texCoord;
 
 uniform mat4 mvp;
 
 void main() {
-  gl_Position = gl_in[0].gl_Position;
-  gl_Position.xy -= VertexIn[0].spriteExtend_g;
-  VertexOut.texCoord = VertexIn[0].spriteUV_g;
-  VertexOut.texCoord -= VertexIn[0].spriteUVExtend_g;
+  vec4 cornerPos = gl_in[0].gl_Position;
+  texCoord = spriteUV_g[0];
+
+  cornerPos.xy -= spriteExtend_g[0];
+  texCoord -= spriteUVExtend_g[0];
+  gl_Position = mvp * cornerPos;
   EmitVertex();
 
-  gl_Position.x += VertexIn[0].spriteExtend_g.x;
-  VertexOut.texCoord.x += VertexIn[0].spriteUVExtend_g.x;
+  cornerPos.x += 2 * spriteExtend_g[0].x;
+  texCoord.x += 2 * spriteUVExtend_g[0].x;
+  gl_Position = mvp * cornerPos;
   EmitVertex();
 
-  gl_Position.x -= VertexIn[0].spriteExtend_g.x;
-  VertexOut.texCoord.x -= VertexIn[0].spriteUVExtend_g.x;
-  gl_Position.y += VertexIn[0].spriteExtend_g.y;
-  VertexOut.texCoord.y += VertexIn[0].spriteUVExtend_g.y;
+  cornerPos.x -= 2 * spriteExtend_g[0].x;
+  texCoord.x -= 2 * spriteUVExtend_g[0].x;
+  cornerPos.y += 2 * spriteExtend_g[0].y;
+  texCoord.y += 2 * spriteUVExtend_g[0].y;
+  gl_Position = mvp * cornerPos;
   EmitVertex();
 
-  gl_Position.x += VertexIn[0].spriteExtend_g.x;
-  VertexOut.texCoord.x += VertexIn[0].spriteUVExtend_g.x;
+  cornerPos.x += 2 * spriteExtend_g[0].x;
+  texCoord.x += 2 * spriteUVExtend_g[0].x;
+  gl_Position = mvp * cornerPos;
   EmitVertex();
   EndPrimitive();
 }
@@ -131,10 +178,9 @@ fragmentShaderSource = [r|#version 330 core
 in vec2 texCoord;
 out vec4 color;
 
-uniform vec4 tint_color;
 uniform sampler2D tex;
 
 void main() {
-    color = texture(tex, texCoord) * tint_color;
+    color = texture(tex, texCoord);
 }
 |]

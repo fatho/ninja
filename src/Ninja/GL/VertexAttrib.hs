@@ -97,17 +97,26 @@ makeLenses ''VertexAttribInfo
 
 makeLenses ''VertexLayout
 
+applyLayout :: VertexLayout -> IO ()
+applyLayout = mapM_ go . zip [0..] . view vertexAttribs where
+  go (idx, layout) = do
+    let loc = VertexAttrib idx
+    attribEnabled loc $= True
+    attribLayout loc $= layout
+
 instance Monoid VertexLayout where
   mempty = VertexLayout 0 []
-  mappend vl1 vl2 = VertexLayout
-    { _vertexSize = view vertexSize vl1 + view vertexSize vl2
-    , _vertexAttribs = view vertexAttribs vl1 ++ map (withOffset $ view vertexSize vl1) (view vertexAttribs vl2)
-    }
-
--- | Applies an offset to a vertex attribute.
-withOffset :: Int -> VertexAttribLayout -> VertexAttribLayout
-withOffset off vinf = vinf & attribStride +~ off
-                           & attribPointer +~ fromIntegral off
+  mappend vl1 vl2 =
+    let size1 = view vertexSize vl1
+        size2 = view vertexSize vl2
+    in VertexLayout
+        { _vertexSize = size1 + size2
+        , _vertexAttribs =
+               map (attribStride +~ fromIntegral size2) (view vertexAttribs vl1)
+            ++ map ( (attribPointer +~ fromIntegral (view vertexSize vl1))
+                   . (attribStride +~ fromIntegral size1)
+                   ) (view vertexAttribs vl2)
+        }
 
 -- | Values that can be used as vertex data to be streamed to the graphics card.
 class Storable a => VertexData a where

@@ -20,6 +20,7 @@ import           Graphics.GL.Types
 import qualified Graphics.UI.GLFW     as GLFW
 import           Linear
 import           System.Directory     as Dir
+import System.IO
 
 import           Ninja.GL
 import           Ninja.Particles
@@ -68,8 +69,14 @@ main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
     glEnable GL_TEXTURE_2D
 
     putStrLn "initialization"
-    renderer <- newSpriteRenderer
+    renderer <- newSpriteRenderer 100
+    Dir.getCurrentDirectory >>= hPutStrLn stderr
 
+    sampleTex <- textureFromFile "data/tex/explosion.png"
+    print sampleTex
+
+    glPointSize 10
+    glClearColor 0 0 0.5 1
     {-batch <- initSpriteBatch 10
     sprite <- loadSprite "data/tex/explosion.png" (V2 1 1) (V3 (-0.5) (-0.5) 0)
     print sprite
@@ -80,13 +87,15 @@ main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
       {-
       draw batch sprite
       -}
+      drawWithTexture renderer sampleTex
+        [ SpriteVertex (V3 0 0 0) 0.5 0.5 0.5 ]
 
       GLFW.swapBuffers win
       GLFW.pollEvents
     putStrLn "Exit"
     deleteSpriteRenderer renderer
   where
-    hints = GLFW.WindowHint'Samples 4 : openGL33Core
+    hints = GLFW.WindowHint'Resizable False : GLFW.WindowHint'Samples 4 : openGL33Core
 
 -- * GLFW Wrapper
 
