@@ -33,6 +33,7 @@ newtype Program = Program GLuint deriving (Eq, Ord, Show)
 instance Object Program where
   objectId = coerce
   delete1 = glDeleteProgram . objectId
+  isA = liftM (/= GL_FALSE) . glIsProgram . objectId
 
 instance GenObject Program where
   gen1 = liftM Program glCreateProgram

@@ -1,6 +1,7 @@
 module Ninja.GL.VertexArray where
 
 import           Control.Applicative
+import           Control.Monad
 import           Control.Monad.IO.Class
 import           Data.Coerce
 import           Data.Default.Class
@@ -20,6 +21,7 @@ newtype VertexArray = VertexArray GLuint deriving (Eq, Ord, Show)
 instance Object VertexArray where
   objectId = coerce
   delete xs = liftIO $ withArrayLen (coerce xs) $ \n ps -> glDeleteVertexArrays (fromIntegral n) ps
+  isA = liftM (/= GL_FALSE) . glIsVertexArray . objectId
 
 instance GenObject VertexArray where
   gen n = liftIO $ allocaArray n $ \ps -> do

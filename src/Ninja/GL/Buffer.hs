@@ -3,6 +3,7 @@
 module Ninja.GL.Buffer where
 
 import           Control.Applicative
+import           Control.Monad
 import           Control.Monad.IO.Class
 import           Data.Coerce
 import           Data.Default.Class
@@ -31,6 +32,7 @@ newtype BufferUsage = BufferUsage GLenum deriving (Eq, Ord, Show)
 instance Object (Buffer a) where
   objectId = coerce
   delete xs = liftIO $ withArrayLen (coerce xs) $ \n ps -> glDeleteBuffers (fromIntegral n) ps
+  isA = liftM (/= GL_FALSE) . glIsBuffer . objectId
 
 instance GenObject (Buffer a) where
   gen n = liftIO $ allocaArray n $ \ps -> do

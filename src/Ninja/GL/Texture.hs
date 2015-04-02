@@ -43,6 +43,7 @@ newtype Texture = Texture GLuint deriving (Eq, Ord, Show)
 instance Object Texture where
   objectId = coerce
   delete xs = liftIO $ withArrayLen (coerce xs) $ \n ps -> glDeleteTextures (fromIntegral n) ps
+  isA = liftM (/= GL_FALSE) . glIsTexture . objectId
 
 instance GenObject Texture where
   gen n = liftIO $ allocaArray n $ \ps -> do

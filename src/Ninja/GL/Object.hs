@@ -8,7 +8,7 @@ import           Graphics.GL.Types
 -- | Generic interface to an OpenGL object.
 -- <https://www.opengl.org/wiki/OpenGL_Object>
 class Object a where
-  {-# MINIMAL objectId, (delete | delete1) #-}
+  {-# MINIMAL objectId, (delete | delete1), isA #-}
 
   -- | glDelete* call
   delete :: MonadIO m => [a] -> m ()
@@ -20,6 +20,9 @@ class Object a where
 
   -- | The underlying OpenGL object ID
   objectId :: a -> GLuint
+
+  -- | Corresponds to OpenGL 'glIs*' functions.
+  isA :: MonadIO m => a -> m Bool
 
 -- | Generic interface to an object that also can be user generated.
 class Object a => GenObject a where

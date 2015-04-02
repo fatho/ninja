@@ -40,6 +40,7 @@ createShader ty = do
 instance Object Shader where
   objectId = coerce
   delete1  = glDeleteShader . objectId
+  isA = liftM (/= GL_FALSE) . glIsShader . objectId
 
 -- | Tries to compile a shader using 'glCompileShader'.
 compileShader :: Shader -> IO ()
