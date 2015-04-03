@@ -78,6 +78,8 @@ data VertexLayout = VertexLayout
 data VertexAttribInfo = VertexAttribInfo
   { _vertexAttribName   :: String
   -- ^ Name of the attribute which is used for looking up the location.
+  , _vertexAttribWidth     :: Int
+  -- ^ the number of attribute locations this attribute takes up.
   , _vertexAttribLayout :: VertexAttribLayout
   -- ^ The actual layout of the attribute.
   }
@@ -88,13 +90,15 @@ makeLenses ''VertexAttribInfo
 makeLenses ''VertexLayout
 
 -- | Applies a vertex layout, directly indexing the locations.
--- WARNING: Some data types may take more than one attribute location.
-applyLayoutByIndices :: [Int] -> VertexLayout -> IO ()
-applyLayoutByIndices locations = mapM_ go . zip locations . view vertexAttribs where
-  go (idx, layout) = do
+-- WARNING: Some data types may take more than one attribute location. This was not tested.
+applyLayoutByIndex :: Int -> VertexLayout -> IO ()
+applyLayoutByIndex baseLoc = go baseLoc . view vertexAttribs where
+  go _ [] = return ()
+  go idx (l:ls) = do
     let loc = VertexAttrib $ fromIntegral idx
     attribEnabled loc $= True
-    attribLayout loc $= view vertexAttribLayout layout
+    attribLayout loc $= view vertexAttribLayout l
+    go (idx + view vertexAttribWidth l) ls
 
 -- | Applies a vertex layout using the names of the attributes to determine the locations.
 applyLayoutByName :: Program -> VertexLayout -> IO ()
@@ -125,24 +129,24 @@ class Storable a => VertexData a where
   default vertexLayout :: (Generic a, GVertexData (Rep a)) => a -> VertexLayout
   vertexLayout = gvertexLayout . Generics.from
 
-storableVertexLayout :: Storable a => GLenum -> Int -> a -> VertexLayout
-storableVertexLayout dataType num x = VertexLayout (sizeOf x) 
-  [ VertexAttribInfo "" $ VertexAttribLayout num dataType False (sizeOf x) 0 ]
+storableVertexLayout :: Storable a => GLenum -> Int -> Int -> a -> VertexLayout
+storableVertexLayout dataType width num x = VertexLayout (sizeOf x) 
+  [ VertexAttribInfo "" width $ VertexAttribLayout num dataType False (sizeOf x) 0 ]
 
 instance VertexData Float where
-  vertexLayout = storableVertexLayout GL_FLOAT 1
+  vertexLayout = storableVertexLayout GL_FLOAT 1 1
 
 instance VertexData (V1 Float) where
-  vertexLayout = storableVertexLayout GL_FLOAT 1
+  vertexLayout = storableVertexLayout GL_FLOAT 1 1
 
 instance VertexData (V2 Float) where
-  vertexLayout = storableVertexLayout GL_FLOAT 2
+  vertexLayout = storableVertexLayout GL_FLOAT 1 2
 
 instance VertexData (V3 Float) where
-  vertexLayout = storableVertexLayout GL_FLOAT 3
+  vertexLayout = storableVertexLayout GL_FLOAT 1 3
 
 instance VertexData (V4 Float) where
-  vertexLayout = storableVertexLayout GL_FLOAT 4
+  vertexLayout = storableVertexLayout GL_FLOAT 1 4
 
 
 class GVertexData f where
