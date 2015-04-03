@@ -1,8 +1,8 @@
 {-# LANGUAGE DataKinds  #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase, ForeignFunctionInterface #-}
 module Main where
 
-import qualified Codec.Picture        as JP
+import qualified Codec.Picture                as JP
 import           Control.Applicative
 import           Control.Exception
 import           Control.Monad
@@ -10,21 +10,23 @@ import           Control.Monad.Except
 import           Control.Monad.IfElse
 import           Control.Monad.Trans.Resource
 import           Data.Bits
-import qualified Data.ByteString      as BS
+import qualified Data.ByteString              as BS
 import           Data.IORef
 import           Data.Maybe
+import           Foreign.C.String
 import           Foreign.Ptr
 import           Foreign.Storable
 import           Graphics.GL.Core33
+import qualified Graphics.GL.Ext.ARB.DebugOutput as Dbg
 import           Graphics.GL.Types
-import qualified Graphics.UI.GLFW     as GLFW
+import qualified Graphics.UI.GLFW             as GLFW
 import           Linear
-import           System.Directory     as Dir
-import System.IO
+import           System.Directory             as Dir
+import           System.IO
 
 import           Ninja.GL
-import           Ninja.Particles
 import           Ninja.GL2D.Sprite
+import           Ninja.Util
 
 ngon :: Int -> GLfloat -> [V3 GLfloat]
 ngon n radius = map mkV [0..n-1] where
@@ -64,15 +66,33 @@ loadShaders vertPath fragPath = do
   fragSource <- BS.readFile fragPath
   createProgramFromSource [vertSource] [] [fragSource]
 
+type GLDEBUGPROCARB_RAW = GLenum -> GLenum -> GLuint -> GLenum -> GLsizei -> Ptr GLchar -> Ptr () -> IO ()
+
+debugCallback :: GLenum -> GLenum -> GLuint -> GLenum -> GLsizei -> Ptr GLchar -> Ptr () -> IO ()
+debugCallback source typ msgId severity len msg usr = do
+  putStr "[OPENGL] "
+  peekCStringLen (msg,fromIntegral len) >>= putStrLn
+
 main :: IO ()
 main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
-    glEnable GL_TEXTURE_2D
+    callback <- mkGLDEBUGPROCARB debugCallback
+    Dbg.glDebugMessageCallbackARB callback nullPtr
+
+    printGLStats
+
+    -- extensions that should be used if available according to <https://www.opengl.org/wiki/Common_Mistakes>
+    exts <- openGLExtensions
+    requireExtension exts "GL_ARB_texture_storage"
+    ----------------------------------------------------------
 
     putStrLn "initialization"
+
+    glEnable GL_TEXTURE_2D
+
     renderer <- newSpriteRenderer 100
     Dir.getCurrentDirectory >>= hPutStrLn stderr
 
-    sampleTex <- textureFromFile "data/tex/explosion.png"
+    sampleTex <- textureFromFile "data/tex/explosion.png" True
     print sampleTex
 
     glPointSize 10
@@ -95,7 +115,33 @@ main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
     putStrLn "Exit"
     deleteSpriteRenderer renderer
   where
-    hints = GLFW.WindowHint'Resizable False : GLFW.WindowHint'Samples 4 : openGL33Core
+    hints = GLFW.WindowHint'OpenGLDebugContext True : GLFW.WindowHint'Resizable False : GLFW.WindowHint'Samples 4 : openGL33Core
+
+
+printGLStats :: IO ()
+printGLStats = do
+  putStr "Version:  "
+  glGetString GL_VERSION >>= peekCString . castPtr >>= putStrLn
+  putStr "Vendor:   "
+  glGetString GL_VENDOR >>= peekCString . castPtr >>= putStrLn
+  putStr "Renderer: "
+  glGetString GL_RENDERER >>= peekCString . castPtr >>= putStrLn
+  putStr "GLSL:     "
+  glGetString GL_SHADING_LANGUAGE_VERSION >>= peekCString . castPtr >>= putStrLn
+  putStr "#TIU:     "
+  withPtrOut (glGetIntegerv GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS) >>= print
+  putStrLn "Extensions:"
+  openGLExtensions >>= mapM_ (\str -> putStrLn $ "  " ++ str)
+
+-- * OpenGL Extensions
+
+requireExtension :: [String] -> String -> IO ()
+requireExtension exts ext = unless (ext `elem` exts) $ ioError $ userError $ ext ++ " not available"
+
+openGLExtensions :: IO [String]
+openGLExtensions = do
+  num <- withPtrOut $ glGetIntegerv GL_NUM_EXTENSIONS
+  mapM (glGetStringi GL_EXTENSIONS . fromIntegral >=> peekCString . castPtr) [0..num-1]
 
 -- * GLFW Wrapper
 

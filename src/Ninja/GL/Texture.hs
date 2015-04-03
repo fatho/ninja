@@ -76,17 +76,21 @@ withTexture target = withVar (boundTexture target)
 -- * Textures from file
 
 -- | Loads a texture from a file using 'JP.readImage'.
-textureFromFile :: FilePath -> IO Texture
-textureFromFile path = do
+textureFromFile :: FilePath -> Bool -> IO Texture
+textureFromFile path generateMipmaps = do
   img <- JP.readImage path >>= \case
     Left err -> ioError $ userError $ "failed to load image: " ++ err
     Right x -> return x
   tex <- gen1
   withTexture Texture2D tex $ do
-    textureImage2D Texture2D 0 GL_RGB img
+    textureImage2D Texture2D 0 GL_RGBA8 img
     textureWrap2D Texture2D $= (WrapClampToEdge, WrapClampToEdge)
-    textureMinFilter Texture2D $= FilterNearest
-    textureMagFilter Texture2D $= FilterNearest
+    if generateMipmaps
+        then do
+            generateMipMap Texture2D
+            textureMinFilter Texture2D $= FilterNearestMipMapLinear
+        else textureMinFilter Texture2D $= FilterLinear
+    textureMagFilter Texture2D $= FilterLinear
   return tex
 
 -- * Texture Image
