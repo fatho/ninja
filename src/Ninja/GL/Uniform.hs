@@ -2,18 +2,11 @@
 module Ninja.GL.Uniform where
 
 import           Control.Applicative
-import           Control.Exception
 import           Control.Monad
-import           Control.Monad.IO.Class
-import Control.Lens hiding (coerce)
-import qualified Data.ByteString        as BS
-import qualified Data.ByteString.Unsafe as BSU
 import           Data.Coerce
-import           Data.Default.Class
 import           Data.StateVar
 import qualified Data.Vector.Storable   as VS
 import           Foreign.C.String
-import           Foreign.ForeignPtr
 import           Foreign.Marshal.Alloc
 import           Foreign.Marshal.Array
 import           Foreign.Ptr

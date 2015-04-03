@@ -17,7 +17,6 @@ import           Data.StateVar
 import           Foreign.C.String
 import           Foreign.Marshal.Alloc
 import           Foreign.Ptr
-import           Foreign.Storable
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
 

@@ -6,9 +6,7 @@ import           Control.Monad.IO.Class
 import           Data.Coerce
 import           Data.Default.Class
 import           Data.StateVar
-import           Foreign.Marshal.Alloc
 import           Foreign.Marshal.Array
-import           Foreign.Storable
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
 

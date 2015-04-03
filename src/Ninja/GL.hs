@@ -4,6 +4,7 @@ module Ninja.GL
   , module SV
   ) where
 
+import           Ninja.GL.Blending     as NGL
 import           Ninja.GL.Buffer       as NGL
 import           Ninja.GL.Exception    as NGL
 import           Ninja.GL.Object       as NGL

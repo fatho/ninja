@@ -7,21 +7,12 @@
 module Ninja.GL.VertexAttrib where
 
 import           Control.Applicative
-import           Control.Exception
 import           Control.Lens           hiding (coerce, from)
 import           Control.Monad
-import           Control.Monad.IO.Class
-import qualified Data.ByteString        as BS
-import qualified Data.ByteString.Unsafe as BSU
 import           Data.Coerce
-import           Data.Default.Class
 import           Data.Monoid
 import           Data.StateVar
-import qualified Data.Vector.Storable   as VS
 import           Foreign.C.String
-import           Foreign.ForeignPtr
-import           Foreign.Marshal.Alloc
-import           Foreign.Marshal.Array
 import           Foreign.Ptr
 import           Foreign.Storable
 import           GHC.Generics           (Generic, Rep)
@@ -30,10 +21,8 @@ import           Graphics.GL.Core33
 import           Graphics.GL.Types
 import           Linear
 
-import           Ninja.GL.Object
 import           Ninja.GL.Program
 import           Ninja.GL.Types
-import           Ninja.GL.VertexArray
 import           Ninja.Util
 
 -- * Vertex Attributes
@@ -67,9 +56,8 @@ attribEnabled va = makeStateVar g s where
   s True  = glEnableVertexAttribArray (coerce va)
   s False = glDisableVertexAttribArray (coerce va)
 
-attribLayout :: VertexAttrib -> StateVar VertexAttribLayout
-attribLayout va = makeStateVar g s where
-  g = undefined
+attribLayout :: VertexAttrib -> SettableStateVar VertexAttribLayout
+attribLayout va = makeSettableStateVar s where
   s layout = glVertexAttribPointer (coerce va)
                 (fromIntegral $ view attribSize layout)
                 (fromIntegral $ view attribType layout)
@@ -77,18 +65,21 @@ attribLayout va = makeStateVar g s where
                 (fromIntegral $ view attribStride layout)
                 (intPtrToPtr  $ view attribPointer layout)
 
+-- | Describes the layout of one vertex.
 data VertexLayout = VertexLayout
   { _vertexSize    :: Int
+  -- ^ total size of one vertex
   , _vertexAttribs :: [VertexAttribInfo]
+  -- ^ vertex attributes
   }
   deriving (Eq, Ord, Show, Read)
-{-
-data AttribLocation = AttribByName String | AttribByOrd Int
-  deriving (Eq, Ord, Show, Read)
--}
+
+-- | Description of one vertex attribute.
 data VertexAttribInfo = VertexAttribInfo
   { _vertexAttribName   :: String
+  -- ^ Name of the attribute which is used for looking up the location.
   , _vertexAttribLayout :: VertexAttribLayout
+  -- ^ The actual layout of the attribute.
   }
   deriving (Eq, Ord, Show, Read)
 
@@ -96,13 +87,16 @@ makeLenses ''VertexAttribInfo
 
 makeLenses ''VertexLayout
 
-applyLayoutByOrdinal :: VertexLayout -> IO ()
-applyLayoutByOrdinal = mapM_ go . zip [0..] . view vertexAttribs where
+-- | Applies a vertex layout, directly indexing the locations.
+-- WARNING: Some data types may take more than one attribute location.
+applyLayoutByIndices :: [Int] -> VertexLayout -> IO ()
+applyLayoutByIndices locations = mapM_ go . zip locations . view vertexAttribs where
   go (idx, layout) = do
-    let loc = VertexAttrib idx
+    let loc = VertexAttrib $ fromIntegral idx
     attribEnabled loc $= True
     attribLayout loc $= view vertexAttribLayout layout
 
+-- | Applies a vertex layout using the names of the attributes to determine the locations.
 applyLayoutByName :: Program -> VertexLayout -> IO ()
 applyLayoutByName prog = mapM_ go . view vertexAttribs where
   go layout = do
@@ -131,6 +125,26 @@ class Storable a => VertexData a where
   default vertexLayout :: (Generic a, GVertexData (Rep a)) => a -> VertexLayout
   vertexLayout = gvertexLayout . Generics.from
 
+storableVertexLayout :: Storable a => GLenum -> Int -> a -> VertexLayout
+storableVertexLayout dataType num x = VertexLayout (sizeOf x) 
+  [ VertexAttribInfo "" $ VertexAttribLayout num dataType False (sizeOf x) 0 ]
+
+instance VertexData Float where
+  vertexLayout = storableVertexLayout GL_FLOAT 1
+
+instance VertexData (V1 Float) where
+  vertexLayout = storableVertexLayout GL_FLOAT 1
+
+instance VertexData (V2 Float) where
+  vertexLayout = storableVertexLayout GL_FLOAT 2
+
+instance VertexData (V3 Float) where
+  vertexLayout = storableVertexLayout GL_FLOAT 3
+
+instance VertexData (V4 Float) where
+  vertexLayout = storableVertexLayout GL_FLOAT 4
+
+
 class GVertexData f where
   gvertexLayout :: f p -> VertexLayout
 
@@ -154,23 +168,3 @@ instance GVertexData f => GVertexData (Generics.M1 Generics.C t f) where
 
 instance GVertexData f => GVertexData (Generics.M1 Generics.D t f) where
   gvertexLayout _ = gvertexLayout (undefined :: f p)
-
-storableVertexLayout :: Storable a => GLenum -> Int -> a -> VertexLayout
-storableVertexLayout dataType num x = VertexLayout (sizeOf x) 
-  [ VertexAttribInfo "" $ VertexAttribLayout num dataType False (sizeOf x) 0
-  ]
-
-instance VertexData Float where
-  vertexLayout = storableVertexLayout GL_FLOAT 1
-
-instance VertexData (V1 Float) where
-  vertexLayout = storableVertexLayout GL_FLOAT 1
-
-instance VertexData (V2 Float) where
-  vertexLayout = storableVertexLayout GL_FLOAT 2
-
-instance VertexData (V3 Float) where
-  vertexLayout = storableVertexLayout GL_FLOAT 3
-
-instance VertexData (V4 Float) where
-  vertexLayout = storableVertexLayout GL_FLOAT 4

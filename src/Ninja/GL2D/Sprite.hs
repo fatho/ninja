@@ -6,34 +6,15 @@
 {-# LANGUAGE RecordWildCards    #-}
 module Ninja.GL2D.Sprite where
 
-import qualified Codec.Picture           as JP
-import           Control.Applicative
-import           Control.Arrow
-import           Control.Exception
 import           Control.Lens
-import           Control.Monad
-import           Control.Monad.IO.Class
-import qualified Data.ByteString         as BS
-import qualified Data.ByteString.Unsafe  as BSU
-import           Data.Coerce
 import           Data.Data
-import           Data.Default.Class
-import           Data.IORef
 import qualified Data.List               as List
-import           Data.Ord
 import           Data.StateVar
-import qualified Data.Vector.Storable    as VS
-import           Foreign.C.String
-import           Foreign.ForeignPtr
-import           Foreign.Marshal.Alloc
-import           Foreign.Marshal.Array
-import           Foreign.Ptr
 import           Foreign.Storable
 import           GHC.Generics
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
 import           Linear
-import           System.IO.Unsafe        (unsafePerformIO)
 import           Text.RawString.QQ
 
 import           Ninja.GL

@@ -19,12 +19,14 @@ cabal-version:       >=1.10
 executable yolo-ninja
   main-is:              Main.hs
   other-modules:        Ninja.GL
+                        Ninja.GL.Blending
                         Ninja.GL.Buffer
                         Ninja.GL.Exception
                         Ninja.GL.Object
+                        Ninja.GL.Program
                         Ninja.GL.Shader
-                        Ninja.GL.Types
                         Ninja.GL.Texture
+                        Ninja.GL.Types
                         Ninja.GL.Uniform
                         Ninja.GL.VertexArray
                         Ninja.GL.VertexAttrib

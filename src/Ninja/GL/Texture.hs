@@ -7,34 +7,29 @@
 {-# LANGUAGE TypeFamilies           #-}
 module Ninja.GL.Texture where
 
-import qualified Codec.Picture          as JP
-import qualified Codec.Picture.Types    as JP
+import qualified Codec.Picture                                 as JP
+import qualified Codec.Picture.Types                           as JP
 import           Control.Applicative
-import           Control.Exception
+import           Control.Lens                                  hiding (coerce)
 import           Control.Monad
 import           Control.Monad.IO.Class
-import qualified Data.ByteString        as BS
-import qualified Data.ByteString.Unsafe as BSU
 import           Data.Coerce
 import           Data.Default.Class
 import           Data.StateVar
-import qualified Data.Vector.Storable   as VS
-import qualified Data.Vector.Storable.Mutable   as VSM
-import           Foreign.C.String
-import           Foreign.ForeignPtr
-import           Foreign.Marshal.Alloc
+import qualified Data.Vector.Storable                          as VS
 import           Foreign.Marshal.Array
-import           Foreign.Marshal.Utils
 import           Foreign.Ptr
 import           Foreign.Storable
 import           Graphics.GL.Core33
+import qualified Graphics.GL.Ext.ARB.ClearTexture              as TexClear
+import qualified Graphics.GL.Ext.ARB.TextureStorage            as TexStore
+import qualified Graphics.GL.Ext.ARB.TextureStorageMultisample as TexStore
 import           Graphics.GL.Types
 import           Linear
-import           System.IO.Unsafe
 
-import           Ninja.Util
 import           Ninja.GL.Object
 import           Ninja.GL.Types
+import           Ninja.Util
 
 -- | Encapsulates an OpenGL texture target.
 data TextureTarget = TextureTarget GLenum GLenum deriving (Eq, Ord, Show)
@@ -88,8 +83,8 @@ textureFromFile path generateMipmaps = do
     Right x -> return x
   tex <- gen1
   withTexture Texture2D tex $ do
-    textureImage2D Texture2D 0 GL_RGBA8 $= img
-    textureWrap2D Texture2D $= (WrapClampToEdge, WrapClampToEdge)
+    textureImage Texture2D 0 GL_RGBA8 $= img
+    textureWrap Texture2D $= V2 WrapClampToEdge WrapClampToEdge
     if generateMipmaps
         then do
             generateMipMap Texture2D
@@ -108,29 +103,6 @@ type TextureType = GLenum
 -- | Object convertible to texture data. d is the dimension and should be either 'V1', 'V2' or 'V3'.
 class TextureData a d | a -> d where
   withRawTexture :: a -> (TextureFormat -> TextureType -> d GLsizei -> Ptr () -> IO ()) -> IO ()
-
--- | Flips raw texture data.
-flipRawTextureData :: Int -> Int -> Ptr a -> IO ()
-flipRawTextureData stride height ptr = do
-    print (stride, height)
-    allocaBytes stride $ \tmpPtr ->
-      forM_ [0..height `div` 2 - 1] (swap tmpPtr) 
-  where
-    swap tmpPtr y = do
-      let y' = height - 1 - y
-      copyBytes tmpPtr (ptr `plusPtr` (stride * y)) stride
-      copyBytes (ptr `plusPtr` (stride * y)) (ptr `plusPtr` (stride * y')) stride
-      copyBytes (ptr `plusPtr` (stride * y')) tmpPtr stride
-
--- | Flips an image by creating a copy.
-flipImage :: forall px. (Storable (JP.PixelBaseComponent px), JP.Pixel px) => JP.Image px -> JP.Image px
-flipImage img = unsafePerformIO $ do -- Don't worry, should actually be totally safe.
-  mimg@(JP.MutableImage w h mvs) <- JP.thawImage img
-  let isize = sizeOf (undefined :: JP.PixelBaseComponent px) * JP.componentCount (undefined :: px)
-  print (w, h, isize)
-  VSM.unsafeWith mvs $ \ptr -> flipRawTextureData (w * isize) h ptr
-  JP.unsafeFreezeImage mimg
-
 
 instance TextureData JP.DynamicImage V2 where
   withRawTexture tex f = case tex of
@@ -153,7 +125,6 @@ instance TextureData JP.DynamicImage V2 where
         toRGBA16 :: JP.ColorSpaceConvertible a JP.PixelRGB16 => JP.Image a -> JP.Image JP.PixelRGBA16
         toRGBA16 x = JP.promoteImage (JP.convertImage x :: JP.Image JP.PixelRGB16)
 
-        unsupported = error "unsupported image format"
         go :: Storable (JP.PixelBaseComponent a)
             => JP.Image a -> GLenum -> GLenum -> IO ()
         go img fmt dataType = VS.unsafeWith (JP.imageData img) $ \dataArr ->
@@ -161,49 +132,107 @@ instance TextureData JP.DynamicImage V2 where
                 (fromIntegral <$> V2 (JP.imageWidth img) (JP.imageHeight img))
                 (castPtr dataArr)
 
--- | Uploads a 1D texture to the driver.
-textureImage1D :: (TextureData a V1) =>  TextureTarget -> Int -> TextureInternalFormat -> SettableStateVar a
-textureImage1D (TextureTarget _ target) lvl innerFmt = makeSettableStateVar $ flip withRawTexture
-  $ \fmt dataTy (V1 w) dat ->
-      glTexImage1D target (fromIntegral lvl) innerFmt w 0 fmt dataTy dat
+-- | Provides generic access to textures of varying dimensions.
+class TextureAccess d where
+  -- | Uploads image data and allocates storage in the process.
+  textureImage :: (TextureData a d) => TextureTarget -> Int -> TextureInternalFormat -> SettableStateVar a
+  -- | Initializes a multisample texture.
+  textureImageMultisample :: TextureTarget -> Int -> TextureInternalFormat -> d GLsizei -> Bool -> IO ()
+  -- | Configures texture wrapping.
+  textureWrap :: TextureTarget -> StateVar (d TextureWrap)
+  -- | Only allocates storage for the texture.
+  textureStorage :: TextureTarget -> Int -> TextureInternalFormat -> d GLsizei -> IO ()
+  -- | Only allocates storage for a multisample texture.
+  textureStorageMultisample :: TextureTarget -> Int -> TextureInternalFormat -> d GLsizei -> Bool -> IO ()
+  -- | Accesses a subimage of a texture beginning at the given offset.
+  textureSubImage :: (TextureData a d) => TextureTarget -> Int -> d GLint -> SettableStateVar a
+  -- | Clears a part of the texture
+  textureClearSubImage :: Texture -> Int -> d GLint -> d GLsizei -> Color -> IO ()
 
--- | Uploads a 2D texture to the driver.
-textureImage2D :: (TextureData a V2) =>  TextureTarget -> Int -> TextureInternalFormat -> SettableStateVar a
-textureImage2D (TextureTarget _ target) lvl innerFmt = makeSettableStateVar $ flip withRawTexture
+-- | Clears the texture using the given color.
+textureClearImage :: Texture -> Int -> Color -> IO ()
+textureClearImage tex level col = withPtrIn col $ \ptr ->
+  TexClear.glClearTexImage (objectId tex) (fromIntegral level) GL_RGBA GL_FLOAT (castPtr ptr)
+
+textureWrap' :: GLenum -> TextureTarget -> StateVar TextureWrap
+textureWrap' idx (TextureTarget _ target) = makeStateVar g s where
+    g = TextureWrap . fromIntegral <$> withPtrOut (glGetTexParameteriv target idx)
+    s = glTexParameteri target idx . fromIntegral . fromTextureWrap
+
+instance TextureAccess V1 where
+  textureImage (TextureTarget _ target) lvl innerFmt = makeSettableStateVar $ flip withRawTexture
+    $ \fmt dataTy (V1 w) dat ->
+        glTexImage1D target (fromIntegral lvl) innerFmt w 0 fmt dataTy dat
+
+  textureImageMultisample = error "multisampling not supported for 1D textures"
+
+  textureWrap = mapStateVar (view _x) V1 . textureWrap' GL_TEXTURE_WRAP_S
+
+  textureStorage (TextureTarget _ target) numLevels innerFmt (V1 w) =
+    TexStore.glTexStorage1D target (fromIntegral numLevels) (fromIntegral innerFmt) w
+
+  textureStorageMultisample = error "multisampling not supported for 1D textures"
+
+  textureSubImage (TextureTarget _ target) lvl (V1 x) = makeSettableStateVar $ flip withRawTexture
+    $ \fmt dataTy (V1 w) dat ->
+        glTexSubImage1D target (fromIntegral lvl) x w fmt dataTy dat
+
+  textureClearSubImage tex lvl (V1 x) (V1 w) col = withPtrIn col $ \ptr ->
+    TexClear.glClearTexSubImage (objectId tex) (fromIntegral lvl) x 0 0 w 1 1 GL_RGBA GL_FLOAT (castPtr ptr)
+
+instance TextureAccess V2 where
+  textureImage (TextureTarget _ target) lvl innerFmt = makeSettableStateVar $ flip withRawTexture
    $ \fmt dataTy (V2 w h) dat ->
        glTexImage2D target (fromIntegral lvl) innerFmt w h 0 fmt dataTy dat
 
--- | Uploads a 3D texture to the driver.
-textureImage3D :: (TextureData a V3) =>  TextureTarget -> Int -> TextureInternalFormat -> SettableStateVar a
-textureImage3D (TextureTarget _ target) lvl innerFmt = makeSettableStateVar $ flip withRawTexture
+  textureImageMultisample (TextureTarget _ target) samples innerFmt (V2 w h) fixed =
+    glTexImage2DMultisample target (fromIntegral samples) (fromIntegral innerFmt) w h (toGLBool fixed)
+
+  textureWrap target = combineStateVars (uncurry V2) (\(V2 x y) -> (x,y)) 
+                                        (textureWrap' GL_TEXTURE_WRAP_S target) 
+                                        (textureWrap' GL_TEXTURE_WRAP_T target)
+
+  textureStorage (TextureTarget _ target) numLevels innerFmt (V2 w h) =
+    TexStore.glTexStorage2D target (fromIntegral numLevels) (fromIntegral innerFmt) w h
+
+  textureStorageMultisample (TextureTarget _ target) samples innerFmt (V2 w h) fixed =
+    TexStore.glTexStorage2DMultisample target (fromIntegral samples) (fromIntegral innerFmt) w h (toGLBool fixed)
+
+  textureSubImage (TextureTarget _ target) lvl (V2 x y) = makeSettableStateVar $ flip withRawTexture
+    $ \fmt dataTy (V2 w h) dat ->
+        glTexSubImage2D target (fromIntegral lvl) x y w h fmt dataTy dat
+
+  textureClearSubImage tex lvl (V2 x y) (V2 w h) col = withPtrIn col $ \ptr ->
+    TexClear.glClearTexSubImage (objectId tex) (fromIntegral lvl) x y 0 w h 1 GL_RGBA GL_FLOAT (castPtr ptr)
+
+instance TextureAccess V3 where
+  textureImage (TextureTarget _ target) lvl innerFmt = makeSettableStateVar $ flip withRawTexture
    $ \fmt dataTy (V3 w h d) dat ->
        glTexImage3D target (fromIntegral lvl) innerFmt w h d 0 fmt dataTy dat
 
--- TODO: glGetTexImage, glTexSubImage
+  textureImageMultisample (TextureTarget _ target) samples innerFmt (V3 w h d) fixed =
+    glTexImage3DMultisample target (fromIntegral samples) (fromIntegral innerFmt) w h d (toGLBool fixed)
+
+  textureWrap target = combineStateVars (\(V2 s t, r) -> V3 s t r) (\(V3 s t r) -> (V2 s t, r)) 
+                                        (textureWrap target) 
+                                        (textureWrap' GL_TEXTURE_WRAP_R target)
+
+  textureStorage (TextureTarget _ target) numLevels innerFmt (V3 w h d) =
+    TexStore.glTexStorage3D target (fromIntegral numLevels) (fromIntegral innerFmt) w h d
+
+  textureStorageMultisample (TextureTarget _ target) samples innerFmt (V3 w h d) fixed =
+    TexStore.glTexStorage3DMultisample target (fromIntegral samples) (fromIntegral innerFmt) w h d (toGLBool fixed)
+
+  textureSubImage (TextureTarget _ target) lvl (V3 x y z) = makeSettableStateVar $ flip withRawTexture
+    $ \fmt dataTy (V3 w h d) dat ->
+        glTexSubImage3D target (fromIntegral lvl) x y z w h d fmt dataTy dat
+
+  textureClearSubImage tex lvl (V3 x y z) (V3 w h d) col = withPtrIn col $ \ptr ->
+    TexClear.glClearTexSubImage (objectId tex) (fromIntegral lvl) x y z w h d GL_RGBA GL_FLOAT (castPtr ptr)
 
 -- * Texture Parameters
 
-newtype TextureWrap = TextureWrap GLenum deriving (Eq, Ord, Show)
-
--- | Controls texture wrapping for 2D textures.
-textureWrap2D :: TextureTarget -> StateVar (TextureWrap, TextureWrap)
-textureWrap2D (TextureTarget binding target) = makeStateVar g s where
-  g = (,) <$> liftM (TextureWrap . fromIntegral) (withPtrOut (glGetTexParameteriv target GL_TEXTURE_WRAP_S))
-          <*> liftM (TextureWrap . fromIntegral) (withPtrOut (glGetTexParameteriv target GL_TEXTURE_WRAP_T))
-  s (TextureWrap s,TextureWrap t) = do
-    glTexParameteri target GL_TEXTURE_WRAP_S (fromIntegral s)
-    glTexParameteri target GL_TEXTURE_WRAP_T (fromIntegral t)
-
--- | Controls texture wrapping for 3D textures.
-textureWrap3D :: TextureTarget -> StateVar (TextureWrap, TextureWrap, TextureWrap)
-textureWrap3D (TextureTarget binding target) = makeStateVar g s where
-  g = (,,) <$> liftM (TextureWrap . fromIntegral) (withPtrOut (glGetTexParameteriv target GL_TEXTURE_WRAP_S))
-           <*> liftM (TextureWrap . fromIntegral) (withPtrOut (glGetTexParameteriv target GL_TEXTURE_WRAP_T))
-           <*> liftM (TextureWrap . fromIntegral) (withPtrOut (glGetTexParameteriv target GL_TEXTURE_WRAP_R))
-  s (TextureWrap s,TextureWrap t,TextureWrap r) = do
-    glTexParameteri target GL_TEXTURE_WRAP_S (fromIntegral s)
-    glTexParameteri target GL_TEXTURE_WRAP_T (fromIntegral t)
-    glTexParameteri target GL_TEXTURE_WRAP_R (fromIntegral r)
+newtype TextureWrap = TextureWrap { fromTextureWrap :: GLenum } deriving (Eq, Ord, Show)
 
 -- | Controls the border color used for 'GL_CLAMP_TO_BORDER'.
 textureBorderColor :: TextureTarget -> StateVar Color

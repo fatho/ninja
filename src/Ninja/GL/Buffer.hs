@@ -96,7 +96,12 @@ boundBuffer (BufferTarget ivar buftype) = makeStateVar getva setva where
   getva = Buffer . fromIntegral <$> alloca (\p -> glGetIntegerv ivar p >> peek p)
   setva = glBindBuffer buftype . coerce
 
+
 pattern ArrayBuffer = BufferTarget GL_ARRAY_BUFFER_BINDING GL_ARRAY_BUFFER
+pattern ElementArrayBuffer = BufferTarget GL_ELEMENT_ARRAY_BUFFER_BINDING GL_ELEMENT_ARRAY_BUFFER
+pattern TextureBuffer = BufferTarget GL_TEXTURE_BINDING_BUFFER GL_TEXTURE_BUFFER
+pattern UniformBuffer = BufferTarget GL_UNIFORM_BUFFER_BINDING GL_UNIFORM_BUFFER
+-- TODO: Other Buffer Targets
 
 pattern StreamRead = BufferUsage GL_STREAM_READ
 pattern StreamDraw = BufferUsage GL_STREAM_DRAW
