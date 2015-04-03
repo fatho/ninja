@@ -28,14 +28,16 @@ import           Ninja.Util
 -- * Vertex Attributes
 
 -- | Handle to a vertex attribute.
-newtype VertexAttrib = VertexAttrib GLuint deriving (Eq, Ord, Show)
+newtype VertexAttrib = VertexAttrib { vertexAttribIndex :: GLuint } deriving (Eq, Ord, Show)
 
 -- | Returns the location of a vertex attribute.
 attributeOf :: Program -> String -> IO VertexAttrib
-attributeOf prog name = do
-  loc <- withCString name (glGetAttribLocation (coerce prog))
-  when (loc < 0) $ ioError $ userError $ "invalid attrib location of '" ++ name ++ "': " ++ show loc
-  return $ VertexAttrib $ fromIntegral loc
+attributeOf prog name =
+  VertexAttrib . fromIntegral <$> withCString name (glGetAttribLocation (coerce prog))
+
+-- | Checks if the uniform refers to a valid index.
+attribValid :: VertexAttrib -> Bool
+attribValid = (>=0) . vertexAttribIndex
 
 -- | Layout of a vertex attribute.
 data VertexAttribLayout = VertexAttribLayout
