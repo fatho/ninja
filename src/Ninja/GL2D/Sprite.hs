@@ -45,6 +45,7 @@ data SpriteVertex = SpriteVertex
   , spriteVertexUV       :: V2 Float
   , spriteVertexUVExtend :: V2 Float
   , spriteVertexRotation :: Float
+  , spriteVertexTint     :: V4 Float
   }
   deriving (Eq, Ord, Show, Read, Typeable, Data, Generic)
 
@@ -113,16 +114,18 @@ drawWithTexture SpriteRenderer{..} tex sprites =
 vertexShaderSource :: String
 vertexShaderSource = [r|#version 330 core
 
-in vec3 spriteVertexPos;
-in vec2 spriteVertexExtend;
-in vec2 spriteVertexUV;
-in vec2 spriteVertexUVExtend;
+in vec3  spriteVertexPos;
+in vec2  spriteVertexExtend;
+in vec2  spriteVertexUV;
+in vec2  spriteVertexUVExtend;
 in float spriteVertexRotation;
+in vec4  spriteVertexTint;
 
 out vec2 spriteExtend_g;
 out vec2 spriteUV_g;
 out vec2 spriteUVExtend_g;
 out float spriteRotation_g;
+out vec4  spriteTint_g;
 
 void main() {
   gl_Position = vec4(spriteVertexPos, 1);
@@ -130,6 +133,7 @@ void main() {
   spriteUV_g = spriteVertexUV;
   spriteUVExtend_g = spriteVertexUVExtend;
   spriteRotation_g = spriteVertexRotation;
+  spriteTint_g = spriteVertexTint;
 }
 |]
 
@@ -143,41 +147,52 @@ in vec2 spriteExtend_g[];
 in vec2 spriteUV_g[];
 in vec2 spriteUVExtend_g[];
 in float spriteRotation_g[];
+in vec4 spriteTint_g[];
 
 out vec2 texCoord;
+out vec4 tintColor;
 
 uniform mat4 mvp;
 
 void main() {
-  mat4 RotationMatrix = mat4( cos(spriteRotation_g[0]), -sin(spriteRotation_g[0]), 0.0, 0.0,
-                               sin(spriteRotation_g[0]),  cos(spriteRotation_g[0]), 0.0, 0.0,
-                               0.0,           0.0, 1.0, 0.0,
-                               0.0,           0.0, 0.0, 1.0 );
+  vec2 extX = vec2( cos(spriteRotation_g[0]) * spriteExtend_g[0].x
+                  , -sin(spriteRotation_g[0]) * spriteExtend_g[0].x
+                  );
+  vec2 extY = vec2( sin(spriteRotation_g[0]) * spriteExtend_g[0].y
+                  , cos(spriteRotation_g[0]) * spriteExtend_g[0].y
+                  );
+
+  tintColor = spriteTint_g[0];
 
   vec4 cornerPos = gl_in[0].gl_Position;
   texCoord = spriteUV_g[0];
 
-  cornerPos.xy -= spriteExtend_g[0];
+  cornerPos.xy -= extX;
+  cornerPos.xy -= extY;
+
   texCoord.x -= spriteUVExtend_g[0].x;
-  texCoord.y += spriteUVExtend_g[0].y;
-  gl_Position = mvp * RotationMatrix * cornerPos;
+  texCoord.y -= spriteUVExtend_g[0].y;
+  gl_Position = mvp * cornerPos;
   EmitVertex();
 
-  cornerPos.x += 2 * spriteExtend_g[0].x;
+  cornerPos.xy += 2 * extX;
+  gl_Position = mvp * cornerPos;
+
   texCoord.x += 2 * spriteUVExtend_g[0].x;
-  gl_Position = mvp * RotationMatrix * cornerPos;
   EmitVertex();
 
-  cornerPos.x -= 2 * spriteExtend_g[0].x;
+  cornerPos.xy -= 2 * extX;
+  cornerPos.xy += 2 * extY;
+  gl_Position = mvp * cornerPos;
+
   texCoord.x -= 2 * spriteUVExtend_g[0].x;
-  cornerPos.y += 2 * spriteExtend_g[0].y;
-  texCoord.y -= 2 * spriteUVExtend_g[0].y;
-  gl_Position = mvp * RotationMatrix * cornerPos;
+  texCoord.y += 2 * spriteUVExtend_g[0].y;
   EmitVertex();
 
-  cornerPos.x += 2 * spriteExtend_g[0].x;
+  cornerPos.xy += 2 * extX;
+  gl_Position = mvp * cornerPos;
+
   texCoord.x += 2 * spriteUVExtend_g[0].x;
-  gl_Position = mvp * RotationMatrix * cornerPos;
   EmitVertex();
   EndPrimitive();
 }
@@ -187,11 +202,12 @@ fragmentShaderSource :: String
 fragmentShaderSource = [r|#version 330 core
 
 in vec2 texCoord;
+in vec4 tintColor;
 out vec4 color;
 
 uniform sampler2D tex;
 
 void main() {
-    color = texture(tex, texCoord);
+    color = texture(tex, texCoord) * tintColor;
 }
 |]

@@ -3,10 +3,12 @@
 {-# LANGUAGE LambdaCase             #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE PatternSynonyms        #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE TypeFamilies           #-}
 module Ninja.GL.Texture where
 
 import qualified Codec.Picture          as JP
+import qualified Codec.Picture.Types    as JP
 import           Control.Applicative
 import           Control.Exception
 import           Control.Monad
@@ -17,17 +19,20 @@ import           Data.Coerce
 import           Data.Default.Class
 import           Data.StateVar
 import qualified Data.Vector.Storable   as VS
+import qualified Data.Vector.Storable.Mutable   as VSM
 import           Foreign.C.String
 import           Foreign.ForeignPtr
 import           Foreign.Marshal.Alloc
 import           Foreign.Marshal.Array
+import           Foreign.Marshal.Utils
 import           Foreign.Ptr
 import           Foreign.Storable
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
 import           Linear
+import           System.IO.Unsafe
 
-import Ninja.Util
+import           Ninja.Util
 import           Ninja.GL.Object
 import           Ninja.GL.Types
 
@@ -83,7 +88,7 @@ textureFromFile path generateMipmaps = do
     Right x -> return x
   tex <- gen1
   withTexture Texture2D tex $ do
-    textureImage2D Texture2D 0 GL_RGBA8 img
+    textureImage2D Texture2D 0 GL_RGBA8 $= img
     textureWrap2D Texture2D $= (WrapClampToEdge, WrapClampToEdge)
     if generateMipmaps
         then do
@@ -104,22 +109,50 @@ type TextureType = GLenum
 class TextureData a d | a -> d where
   withRawTexture :: a -> (TextureFormat -> TextureType -> d GLsizei -> Ptr () -> IO ()) -> IO ()
 
+-- | Flips raw texture data.
+flipRawTextureData :: Int -> Int -> Ptr a -> IO ()
+flipRawTextureData stride height ptr = do
+    print (stride, height)
+    allocaBytes stride $ \tmpPtr ->
+      forM_ [0..height `div` 2 - 1] (swap tmpPtr) 
+  where
+    swap tmpPtr y = do
+      let y' = height - 1 - y
+      copyBytes tmpPtr (ptr `plusPtr` (stride * y)) stride
+      copyBytes (ptr `plusPtr` (stride * y)) (ptr `plusPtr` (stride * y')) stride
+      copyBytes (ptr `plusPtr` (stride * y')) tmpPtr stride
+
+-- | Flips an image by creating a copy.
+flipImage :: forall px. (Storable (JP.PixelBaseComponent px), JP.Pixel px) => JP.Image px -> JP.Image px
+flipImage img = unsafePerformIO $ do -- Don't worry, should actually be totally safe.
+  mimg@(JP.MutableImage w h mvs) <- JP.thawImage img
+  let isize = sizeOf (undefined :: JP.PixelBaseComponent px) * JP.componentCount (undefined :: px)
+  print (w, h, isize)
+  VSM.unsafeWith mvs $ \ptr -> flipRawTextureData (w * isize) h ptr
+  JP.unsafeFreezeImage mimg
+
+
 instance TextureData JP.DynamicImage V2 where
   withRawTexture tex f = case tex of
-        JP.ImageY8 _ -> unsupported
-        JP.ImageY16 _ -> unsupported
-        JP.ImageYF _ -> unsupported
-        JP.ImageYA8 _ -> unsupported
-        JP.ImageYA16 _ -> unsupported
-        JP.ImageRGB8 img -> go img GL_RGB GL_UNSIGNED_BYTE
-        JP.ImageRGB16 img -> go img GL_RGB GL_UNSIGNED_SHORT
-        JP.ImageRGBF img -> go img GL_RGB GL_FLOAT
-        JP.ImageRGBA8 img -> go img GL_RGBA GL_UNSIGNED_BYTE
-        JP.ImageRGBA16 img -> go img GL_RGBA GL_UNSIGNED_SHORT
-        JP.ImageYCbCr8 _ -> unsupported
-        JP.ImageCMYK8 _ -> unsupported
-        JP.ImageCMYK16 _ -> unsupported
+        JP.ImageY8 img -> go (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA8) GL_RGBA GL_UNSIGNED_BYTE
+        JP.ImageY16 img -> go (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA16) GL_RGBA GL_UNSIGNED_SHORT
+        JP.ImageYF img -> go (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBF) GL_RGBA GL_UNSIGNED_SHORT
+        JP.ImageYA8 img -> go (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA8) GL_RGBA GL_UNSIGNED_BYTE
+        JP.ImageYA16 img -> go (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA16) GL_RGBA GL_UNSIGNED_SHORT
+        JP.ImageRGB8 img -> go (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA8) GL_RGBA GL_UNSIGNED_BYTE
+        JP.ImageRGB16 img -> go (flipImage img) GL_RGB GL_UNSIGNED_SHORT
+        JP.ImageRGBF img -> go (flipImage img) GL_RGB GL_FLOAT
+        JP.ImageRGBA8 img -> go (flipImage img) GL_RGBA GL_UNSIGNED_BYTE
+        JP.ImageRGBA16 img -> go (flipImage img) GL_RGBA GL_UNSIGNED_SHORT
+        JP.ImageYCbCr8 img -> go (flipImage $ toRGBA8 img) GL_RGBA GL_UNSIGNED_BYTE
+        JP.ImageCMYK8 img -> go (flipImage $ toRGBA8 img) GL_RGBA GL_UNSIGNED_BYTE
+        JP.ImageCMYK16 img -> go (flipImage $ toRGBA16 img :: JP.Image JP.PixelRGBA16) GL_RGBA GL_UNSIGNED_SHORT
     where
+        toRGBA8 :: JP.ColorSpaceConvertible a JP.PixelRGB8 => JP.Image a -> JP.Image JP.PixelRGBA8
+        toRGBA8 x = JP.promoteImage (JP.convertImage x :: JP.Image JP.PixelRGB8)
+        toRGBA16 :: JP.ColorSpaceConvertible a JP.PixelRGB16 => JP.Image a -> JP.Image JP.PixelRGBA16
+        toRGBA16 x = JP.promoteImage (JP.convertImage x :: JP.Image JP.PixelRGB16)
+
         unsupported = error "unsupported image format"
         go :: Storable (JP.PixelBaseComponent a)
             => JP.Image a -> GLenum -> GLenum -> IO ()
@@ -129,20 +162,20 @@ instance TextureData JP.DynamicImage V2 where
                 (castPtr dataArr)
 
 -- | Uploads a 1D texture to the driver.
-textureImage1D :: (TextureData a V1) =>  TextureTarget -> Int -> TextureInternalFormat -> a -> IO ()
-textureImage1D (TextureTarget _ target) lvl innerFmt tex = withRawTexture tex
+textureImage1D :: (TextureData a V1) =>  TextureTarget -> Int -> TextureInternalFormat -> SettableStateVar a
+textureImage1D (TextureTarget _ target) lvl innerFmt = makeSettableStateVar $ flip withRawTexture
   $ \fmt dataTy (V1 w) dat ->
       glTexImage1D target (fromIntegral lvl) innerFmt w 0 fmt dataTy dat
 
 -- | Uploads a 2D texture to the driver.
-textureImage2D :: (TextureData a V2) =>  TextureTarget -> Int -> TextureInternalFormat -> a -> IO ()
-textureImage2D (TextureTarget _ target) lvl innerFmt tex = withRawTexture tex
+textureImage2D :: (TextureData a V2) =>  TextureTarget -> Int -> TextureInternalFormat -> SettableStateVar a
+textureImage2D (TextureTarget _ target) lvl innerFmt = makeSettableStateVar $ flip withRawTexture
    $ \fmt dataTy (V2 w h) dat ->
        glTexImage2D target (fromIntegral lvl) innerFmt w h 0 fmt dataTy dat
 
 -- | Uploads a 3D texture to the driver.
-textureImage3D :: (TextureData a V3) =>  TextureTarget -> Int -> TextureInternalFormat -> a -> IO ()
-textureImage3D (TextureTarget _ target) lvl innerFmt tex = withRawTexture tex
+textureImage3D :: (TextureData a V3) =>  TextureTarget -> Int -> TextureInternalFormat -> SettableStateVar a
+textureImage3D (TextureTarget _ target) lvl innerFmt = makeSettableStateVar $ flip withRawTexture
    $ \fmt dataTy (V3 w h d) dat ->
        glTexImage3D target (fromIntegral lvl) innerFmt w h d 0 fmt dataTy dat
 

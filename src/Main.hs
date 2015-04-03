@@ -11,8 +11,10 @@ import           Control.Monad.IfElse
 import           Control.Monad.Trans.Resource
 import           Data.Bits
 import qualified Data.ByteString              as BS
+import           Data.Fixed (mod')
 import           Data.IORef
 import           Data.Maybe
+import qualified Data.Vector.Storable         as VS
 import           Foreign.C.String
 import           Foreign.Ptr
 import           Foreign.Storable
@@ -54,10 +56,10 @@ main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
 
     putStrLn "initialization"
 
-    -- enable alpha blending
+    -- enable additive blending
     glEnable GL_BLEND
     glBlendEquationSeparate GL_FUNC_ADD GL_FUNC_ADD
-    glBlendFuncSeparate GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA GL_ONE GL_ZERO
+    glBlendFuncSeparate GL_ONE GL_ONE GL_ONE GL_ONE
     {-
     -- Other blend modes are:
     -- SOURCE BLENDING
@@ -70,14 +72,23 @@ main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
     glBlendFuncSeparate GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA GL_ONE GL_ZERO
     -}
 
-    renderer <- newSpriteRenderer 100
+    renderer <- newSpriteRenderer 360
     Dir.getCurrentDirectory >>= hPutStrLn stderr
 
-    sampleTex <- textureFromFile "data/tex/alpha.png" True
+    --sampleTex <- textureFromFile "data/tex/alpha.png" True
+    redTex <- gen1
+    boundTexture Texture2D $= redTex
+    textureMinFilter Texture2D $= FilterNearest
+    textureMagFilter Texture2D $= FilterNearest
+    textureImage2D Texture2D 0 GL_RGBA8 $= JP.ImageRGBA8 
+      (JP.Image 2 2 (VS.fromList [ 255, 0, 0, 255,  0, 255, 0, 255
+                                 , 0, 0, 255, 255,  255, 255, 0, 255 ]))
+    sampleTex <- textureFromFile "data/tex/explosion.png" True
+    wallTex <- textureFromFile "data/tex/wall.jpg" True
     print sampleTex
 
     glPointSize 10
-    glClearColor 0 0 0.5 1
+    glClearColor 0 0 0 1
 
     putStrLn "Begin Loop"
     untilM (GLFW.windowShouldClose win) $ do
@@ -85,8 +96,30 @@ main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
       glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT .|. GL_STENCIL_BUFFER_BIT
 
       Just t <- GLFW.getTime
-      drawWithTexture renderer sampleTex
-        [ SpriteVertex (V3 0 0 0) 0.5 0.5 0.5 (realToFrac t)]
+
+      --let t = 0.5
+      let rnd co = snd $ properFraction (sin (dot co (V2 12.9898 78.233)) * 43758.5453)
+
+      let f t a = let 
+                      t' = t `mod'` 4
+                      tmp = rnd (V2 (1+a) a)
+                      speed = if tmp < 0.5 then 0.5 * (sqrt $ 2 * tmp) else 0.5 + 0.5 * (sqrt $ 2 * tmp)
+                      size  = 0.2 --(tanh(t'*5-2)+1)/10
+                      d = t' / 2 --(t' / 2 * 0.9 + 0.1)**1.2
+                  in SpriteVertex (speed * d *^ V3 (cos a ^ 5) (sin a ^ 5) 0) (realToFrac $ size) 0.5 0.5 (rnd (V2 a a))
+                          (realToFrac $ max 0 $ min 1 $ (1 - t' / 4))
+      let sprites = map (f (realToFrac t * 2) . (/180) . (*pi)) [0,2..359]
+      
+      glBlendFuncSeparate GL_ONE GL_ZERO GL_ONE GL_ZERO
+      drawWithTexture renderer wallTex 
+        [ SpriteVertex (V3 (-0.6) (-0.6) 0) 0.4 0.5 0.5 0 1
+        , SpriteVertex (V3 (-0.6)   0.6  0) 0.4 0.5 0.5 0 1
+        , SpriteVertex (V3   0.6  (-0.6) 0) 0.4 0.5 0.5 0 1
+        , SpriteVertex (V3   0.6    0.6  0) 0.4 0.5 0.5 0 1
+        ]
+
+      glBlendFuncSeparate GL_ONE GL_ONE GL_ONE GL_ONE
+      drawWithTexture renderer sampleTex sprites
 
       GLFW.swapBuffers win
       GLFW.pollEvents
