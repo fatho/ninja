@@ -79,30 +79,36 @@ attribLayout va = makeStateVar g s where
 
 data VertexLayout = VertexLayout
   { _vertexSize    :: Int
-  , _vertexAttribs :: [VertexAttribLayout]
+  , _vertexAttribs :: [VertexAttribInfo]
   }
   deriving (Eq, Ord, Show, Read)
 {-
 data AttribLocation = AttribByName String | AttribByOrd Int
   deriving (Eq, Ord, Show, Read)
-
+-}
 data VertexAttribInfo = VertexAttribInfo
-  { _vertexAttribLocation :: AttribLocation
-  , _vertexAttribLayout   :: VertexAttribLayout
+  { _vertexAttribName   :: String
+  , _vertexAttribLayout :: VertexAttribLayout
   }
   deriving (Eq, Ord, Show, Read)
 
 makeLenses ''VertexAttribInfo
--}
 
 makeLenses ''VertexLayout
 
-applyLayout :: VertexLayout -> IO ()
-applyLayout = mapM_ go . zip [0..] . view vertexAttribs where
+applyLayoutByOrdinal :: VertexLayout -> IO ()
+applyLayoutByOrdinal = mapM_ go . zip [0..] . view vertexAttribs where
   go (idx, layout) = do
     let loc = VertexAttrib idx
     attribEnabled loc $= True
-    attribLayout loc $= layout
+    attribLayout loc $= view vertexAttribLayout layout
+
+applyLayoutByName :: Program -> VertexLayout -> IO ()
+applyLayoutByName prog = mapM_ go . view vertexAttribs where
+  go layout = do
+    loc <- attributeOf prog (layout ^. vertexAttribName)
+    attribEnabled loc $= True
+    attribLayout loc $= view vertexAttribLayout layout
 
 instance Monoid VertexLayout where
   mempty = VertexLayout 0 []
@@ -112,9 +118,9 @@ instance Monoid VertexLayout where
     in VertexLayout
         { _vertexSize = size1 + size2
         , _vertexAttribs =
-               map (attribStride +~ fromIntegral size2) (view vertexAttribs vl1)
-            ++ map ( (attribPointer +~ fromIntegral (view vertexSize vl1))
-                   . (attribStride +~ fromIntegral size1)
+               map (vertexAttribLayout . attribStride +~ fromIntegral size2) (view vertexAttribs vl1)
+            ++ map ( (vertexAttribLayout . attribPointer +~ fromIntegral (view vertexSize vl1))
+                   . (vertexAttribLayout . attribStride +~ fromIntegral size1)
                    ) (view vertexAttribs vl2)
         }
 
@@ -139,11 +145,20 @@ instance (GVertexData f, GVertexData g) => GVertexData (f Generics.:*: g) where
 instance VertexData c => GVertexData (Generics.K1 i c) where
   gvertexLayout _ = vertexLayout (undefined :: c)
 
-instance GVertexData f => GVertexData (Generics.M1 i t f) where
+instance (Generics.Selector t, GVertexData f) => GVertexData (Generics.M1 Generics.S t f) where
+  gvertexLayout _ = gvertexLayout (undefined :: f p) & vertexAttribs.traverse.vertexAttribName %~ (prefix++) where
+    prefix = Generics.selName (undefined :: Generics.S1 t f a)
+
+instance GVertexData f => GVertexData (Generics.M1 Generics.C t f) where
+  gvertexLayout _ = gvertexLayout (undefined :: f p)
+
+instance GVertexData f => GVertexData (Generics.M1 Generics.D t f) where
   gvertexLayout _ = gvertexLayout (undefined :: f p)
 
 storableVertexLayout :: Storable a => GLenum -> Int -> a -> VertexLayout
-storableVertexLayout dataType num x = VertexLayout (sizeOf x) [VertexAttribLayout num dataType False (sizeOf x) 0]
+storableVertexLayout dataType num x = VertexLayout (sizeOf x) 
+  [ VertexAttribInfo "" $ VertexAttribLayout num dataType False (sizeOf x) 0
+  ]
 
 instance VertexData Float where
   vertexLayout = storableVertexLayout GL_FLOAT 1

@@ -28,55 +28,22 @@ import           Ninja.GL
 import           Ninja.GL2D.Sprite
 import           Ninja.Util
 
-ngon :: Int -> GLfloat -> [V3 GLfloat]
-ngon n radius = map mkV [0..n-1] where
-  mkV i = V3 (cos (toAngle i) * radius) (sin (toAngle i) * radius) 0
-  toAngle i = fromIntegral i / fromIntegral n * 2 * pi
-
-testBuffer :: [V3 GLfloat]
-testBuffer =
-  [ V3 (-1.0) (-1.0) 0.0
-  , V3   1.0  (-1.0) 0.0
-  , V3   0.0    1.0  0.0
-  ]
-
-data PosTex = PosTex
-  { vertexPos :: V3 Float
-  , vertexTex :: V2 Float
-  }
-
-instance Storable PosTex where
-  sizeOf _ = sizeOf (undefined :: V3 Float) + sizeOf (undefined :: V2 Float)
-  alignment = sizeOf
-  peek ptr = PosTex <$> peek (castPtr ptr) <*> peekByteOff ptr (sizeOf (undefined :: V3 Float))
-  poke ptr (PosTex p t) = poke (castPtr ptr) p >> pokeByteOff ptr (sizeOf (undefined :: V3 Float)) t
-
-testSquare :: [PosTex]
-testSquare =
-  [ PosTex (V3 (-1.0) (-1.0) 0.0) (V2 0 0)
-  , PosTex (V3   1.0  (-1.0) 0.0) (V2 1 0)
-  , PosTex (V3   1.0    1.0  0.0) (V2 1 1)
-  , PosTex (V3 (-1.0)   1.0  0.0) (V2 0 1)
-  ]
-
-loadShaders :: FilePath -> FilePath -> IO Program
-loadShaders vertPath fragPath = do
-  putStrLn "Loading source from files"
-  vertSource <- BS.readFile vertPath
-  fragSource <- BS.readFile fragPath
-  createProgramFromSource [vertSource] [] [fragSource]
-
-type GLDEBUGPROCARB_RAW = GLenum -> GLenum -> GLuint -> GLenum -> GLsizei -> Ptr GLchar -> Ptr () -> IO ()
-
-debugCallback :: GLenum -> GLenum -> GLuint -> GLenum -> GLsizei -> Ptr GLchar -> Ptr () -> IO ()
-debugCallback source typ msgId severity len msg usr = do
+onDebugMessage :: GLenum -> GLenum -> GLuint -> GLenum -> GLsizei -> Ptr GLchar -> Ptr () -> IO ()
+onDebugMessage source typ msgId severity len msg usr = do
   putStr "[OPENGL] "
   peekCStringLen (msg,fromIntegral len) >>= putStrLn
 
+onFramebufferResized :: (Double -> IO ()) -> GLFW.Window -> Int -> Int -> IO ()
+onFramebufferResized setRatio win w h = glViewport 0 0 (fromIntegral w) (fromIntegral h)
+  >> setRatio (fromIntegral w / fromIntegral h)
+
 main :: IO ()
 main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
-    callback <- mkGLDEBUGPROCARB debugCallback
+    callback <- mkGLDEBUGPROCARB onDebugMessage
     Dbg.glDebugMessageCallbackARB callback nullPtr
+
+    ratioRef <- newIORef undefined
+    GLFW.setFramebufferSizeCallback win (Just $ onFramebufferResized $ writeIORef ratioRef)
 
     printGLStats
 
@@ -87,35 +54,50 @@ main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
 
     putStrLn "initialization"
 
-    glEnable GL_TEXTURE_2D
+    -- enable alpha blending
+    glEnable GL_BLEND
+    glBlendEquationSeparate GL_FUNC_ADD GL_FUNC_ADD
+    glBlendFuncSeparate GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA GL_ONE GL_ZERO
+    {-
+    -- Other blend modes are:
+    -- SOURCE BLENDING
+    glBlendFuncSeparate GL_ONE GL_ZERO GL_ONE GL_ZERO
+    -- ADDITIVE BLENDING:
+    glBlendFuncSeparate GL_ONE GL_ONE GL_ONE GL_ONE
+    -- PREMULTIPLIED ALPHA
+    glBlendFuncSeparate GL_ONE GL_ONE_MINUS_SRC_ALPHA GL_ONE GL_ZERO
+    -- ALPHA
+    glBlendFuncSeparate GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA GL_ONE GL_ZERO
+    -}
 
     renderer <- newSpriteRenderer 100
     Dir.getCurrentDirectory >>= hPutStrLn stderr
 
-    sampleTex <- textureFromFile "data/tex/explosion.png" True
+    sampleTex <- textureFromFile "data/tex/alpha.png" True
     print sampleTex
 
     glPointSize 10
     glClearColor 0 0 0.5 1
-    {-batch <- initSpriteBatch 10
-    sprite <- loadSprite "data/tex/explosion.png" (V2 1 1) (V3 (-0.5) (-0.5) 0)
-    print sprite
-    -}
+
     putStrLn "Begin Loop"
     untilM (GLFW.windowShouldClose win) $ do
-      glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
-      {-
-      draw batch sprite
-      -}
+      ratio <- readIORef ratioRef
+      glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT .|. GL_STENCIL_BUFFER_BIT
+
+      Just t <- GLFW.getTime
       drawWithTexture renderer sampleTex
-        [ SpriteVertex (V3 0 0 0) 0.5 0.5 0.5 ]
+        [ SpriteVertex (V3 0 0 0) 0.5 0.5 0.5 (realToFrac t)]
 
       GLFW.swapBuffers win
       GLFW.pollEvents
+
     putStrLn "Exit"
     deleteSpriteRenderer renderer
   where
-    hints = GLFW.WindowHint'OpenGLDebugContext True : GLFW.WindowHint'Resizable False : GLFW.WindowHint'Samples 4 : openGL33Core
+    hints = GLFW.WindowHint'OpenGLDebugContext True 
+          : GLFW.WindowHint'Resizable False
+          : GLFW.WindowHint'Samples 4 
+          : openGL33Core
 
 
 printGLStats :: IO ()

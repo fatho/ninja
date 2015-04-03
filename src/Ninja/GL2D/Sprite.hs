@@ -44,6 +44,7 @@ data SpriteVertex = SpriteVertex
   , spriteVertexExtend   :: V2 Float
   , spriteVertexUV       :: V2 Float
   , spriteVertexUVExtend :: V2 Float
+  , spriteVertexRotation :: Float
   }
   deriving (Eq, Ord, Show, Read, Typeable, Data, Generic)
 
@@ -83,7 +84,7 @@ newSpriteRenderer nmax = do
     putStrLn "applying layout"
     let layout = vertexLayout (undefined :: SpriteVertex)
     mapM_ print (view vertexAttribs layout)
-    applyLayout layout
+    applyLayoutByName prog layout
   return $ SpriteRenderer prog vao buf mvp tex nmax
 
 deleteSpriteRenderer :: SpriteRenderer -> IO ()
@@ -112,20 +113,23 @@ drawWithTexture SpriteRenderer{..} tex sprites =
 vertexShaderSource :: String
 vertexShaderSource = [r|#version 330 core
 
-layout(location=0) in vec3 spritePos;
-layout(location=1) in vec2 spriteExtend;
-layout(location=2) in vec2 spriteUV;
-layout(location=3) in vec2 spriteUVExtend;
+in vec3 spriteVertexPos;
+in vec2 spriteVertexExtend;
+in vec2 spriteVertexUV;
+in vec2 spriteVertexUVExtend;
+in float spriteVertexRotation;
 
 out vec2 spriteExtend_g;
 out vec2 spriteUV_g;
 out vec2 spriteUVExtend_g;
+out float spriteRotation_g;
 
 void main() {
-  gl_Position = vec4(spritePos, 1);
-  spriteExtend_g = spriteExtend;
-  spriteUV_g = spriteUV;
-  spriteUVExtend_g = spriteUVExtend;
+  gl_Position = vec4(spriteVertexPos, 1);
+  spriteExtend_g = spriteVertexExtend;
+  spriteUV_g = spriteVertexUV;
+  spriteUVExtend_g = spriteVertexUVExtend;
+  spriteRotation_g = spriteVertexRotation;
 }
 |]
 
@@ -138,35 +142,42 @@ layout(triangle_strip, max_vertices = 4) out;
 in vec2 spriteExtend_g[];
 in vec2 spriteUV_g[];
 in vec2 spriteUVExtend_g[];
+in float spriteRotation_g[];
 
 out vec2 texCoord;
 
 uniform mat4 mvp;
 
 void main() {
+  mat4 RotationMatrix = mat4( cos(spriteRotation_g[0]), -sin(spriteRotation_g[0]), 0.0, 0.0,
+                               sin(spriteRotation_g[0]),  cos(spriteRotation_g[0]), 0.0, 0.0,
+                               0.0,           0.0, 1.0, 0.0,
+                               0.0,           0.0, 0.0, 1.0 );
+
   vec4 cornerPos = gl_in[0].gl_Position;
   texCoord = spriteUV_g[0];
 
   cornerPos.xy -= spriteExtend_g[0];
-  texCoord -= spriteUVExtend_g[0];
-  gl_Position = mvp * cornerPos;
+  texCoord.x -= spriteUVExtend_g[0].x;
+  texCoord.y += spriteUVExtend_g[0].y;
+  gl_Position = mvp * RotationMatrix * cornerPos;
   EmitVertex();
 
   cornerPos.x += 2 * spriteExtend_g[0].x;
   texCoord.x += 2 * spriteUVExtend_g[0].x;
-  gl_Position = mvp * cornerPos;
+  gl_Position = mvp * RotationMatrix * cornerPos;
   EmitVertex();
 
   cornerPos.x -= 2 * spriteExtend_g[0].x;
   texCoord.x -= 2 * spriteUVExtend_g[0].x;
   cornerPos.y += 2 * spriteExtend_g[0].y;
-  texCoord.y += 2 * spriteUVExtend_g[0].y;
-  gl_Position = mvp * cornerPos;
+  texCoord.y -= 2 * spriteUVExtend_g[0].y;
+  gl_Position = mvp * RotationMatrix * cornerPos;
   EmitVertex();
 
   cornerPos.x += 2 * spriteExtend_g[0].x;
   texCoord.x += 2 * spriteUVExtend_g[0].x;
-  gl_Position = mvp * cornerPos;
+  gl_Position = mvp * RotationMatrix * cornerPos;
   EmitVertex();
   EndPrimitive();
 }
