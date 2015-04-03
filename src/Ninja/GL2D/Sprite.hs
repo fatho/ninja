@@ -20,13 +20,20 @@ import           Text.RawString.QQ
 import           Ninja.GL
 import           Ninja.Storable.Generics
 
+-- | Data associated with a sprite, ready to be sent to the shader.
 data SpriteVertex = SpriteVertex
   { spriteVertexPos      :: V3 Float
-  , spriteVertexExtend   :: V2 Float
+  -- ^ center position in 3D space
+  , spriteVertexExtent   :: V2 Float
+  -- ^ extent in both X and both Y directions (i.e. half of the total size).
   , spriteVertexUV       :: V2 Float
-  , spriteVertexUVExtend :: V2 Float
+  -- ^ center UV coordinate
+  , spriteVertexUVExtent :: V2 Float
+  -- ^ UV coordinate extent (similar to real size)
   , spriteVertexRotation :: Float
+  -- ^ counter-clockwise rotation in radians
   , spriteVertexTint     :: V4 Float
+  -- ^ tint color applied during the fragment shader phase.
   }
   deriving (Eq, Ord, Show, Read, Typeable, Data, Generic)
 
@@ -41,19 +48,25 @@ instance Storable SpriteVertex where
   poke = genericPoke
 instance VertexData SpriteVertex
 
+-- | Encapsulates the global state needed for sprite rendering.
 data SpriteRenderer = SpriteRenderer
   { spriteRendererProgram :: Program
+  -- ^ shader program processing the vertices
   , spriteRendererVAO     :: VertexArray
+  -- ^ vertex array object needed for drawing
   , spriteRendererBuffer  :: Buffer SpriteVertex
-  , spriteRendererMVP     :: Uniform (M44 Float)
-  , spriteRendererSampler :: Uniform GLint
+  -- ^ array buffer taking the sprites
   , spriteRendererSize    :: Int
+  -- ^ maximum number of sprite vertices fitting in the buffer
+  , spriteRendererMVP     :: Uniform (M44 Float)
+  -- ^ uniform for transferring the model-view-projection matrix
+  , spriteRendererSampler :: Uniform GLint
+  -- ^ sampler uniform
   }
 
 newSpriteRenderer :: Int -> IO SpriteRenderer
 newSpriteRenderer nmax = do
   prog <- createProgramFromSource [vertexShaderSource] [geometryShaderSource] [fragmentShaderSource]
-  putStr "is a prog: " >> isA prog >>= print
   mvp <- uniformOf prog "mvp"
   tex <- uniformOf prog "tex"
   vao <- gen1
@@ -61,13 +74,12 @@ newSpriteRenderer nmax = do
   withVertexArray vao $ do
     boundBuffer ArrayBuffer $= buf
     -- preallocate a buffer on the GPU
-    putStrLn $ "allocating buffer of size " ++ show (nmax * spriteVertexSize) ++ " B"
     bufferData ArrayBuffer $= (StreamDraw, NullData (fromIntegral $ nmax * spriteVertexSize))
-    putStrLn "applying layout"
+
     let layout = vertexLayout (undefined :: SpriteVertex)
-    mapM_ print (view vertexAttribs layout)
     applyLayoutByName prog layout
-  return $ SpriteRenderer prog vao buf mvp tex nmax
+
+  return $ SpriteRenderer prog vao buf nmax mvp tex
 
 deleteSpriteRenderer :: SpriteRenderer -> IO ()
 deleteSpriteRenderer SpriteRenderer{..} = delete1 spriteRendererProgram
@@ -96,23 +108,23 @@ vertexShaderSource :: String
 vertexShaderSource = [r|#version 330 core
 
 in vec3  spriteVertexPos;
-in vec2  spriteVertexExtend;
+in vec2  spriteVertexExtent;
 in vec2  spriteVertexUV;
-in vec2  spriteVertexUVExtend;
+in vec2  spriteVertexUVExtent;
 in float spriteVertexRotation;
 in vec4  spriteVertexTint;
 
-out vec2 spriteExtend_g;
+out vec2 spriteExtent_g;
 out vec2 spriteUV_g;
-out vec2 spriteUVExtend_g;
+out vec2 spriteUVExtent_g;
 out float spriteRotation_g;
 out vec4  spriteTint_g;
 
 void main() {
   gl_Position = vec4(spriteVertexPos, 1);
-  spriteExtend_g = spriteVertexExtend;
+  spriteExtent_g = spriteVertexExtent;
   spriteUV_g = spriteVertexUV;
-  spriteUVExtend_g = spriteVertexUVExtend;
+  spriteUVExtent_g = spriteVertexUVExtent;
   spriteRotation_g = spriteVertexRotation;
   spriteTint_g = spriteVertexTint;
 }
@@ -124,9 +136,9 @@ geometryShaderSource = [r|#version 330 core
 layout(points) in;
 layout(triangle_strip, max_vertices = 4) out;
 
-in vec2 spriteExtend_g[];
+in vec2 spriteExtent_g[];
 in vec2 spriteUV_g[];
-in vec2 spriteUVExtend_g[];
+in vec2 spriteUVExtent_g[];
 in float spriteRotation_g[];
 in vec4 spriteTint_g[];
 
@@ -136,11 +148,11 @@ out vec4 tintColor;
 uniform mat4 mvp;
 
 void main() {
-  vec2 extX = vec2( cos(spriteRotation_g[0]) * spriteExtend_g[0].x
-                  , -sin(spriteRotation_g[0]) * spriteExtend_g[0].x
+  vec2 extX = vec2( cos(spriteRotation_g[0]) * spriteExtent_g[0].x
+                  , -sin(spriteRotation_g[0]) * spriteExtent_g[0].x
                   );
-  vec2 extY = vec2( sin(spriteRotation_g[0]) * spriteExtend_g[0].y
-                  , cos(spriteRotation_g[0]) * spriteExtend_g[0].y
+  vec2 extY = vec2( sin(spriteRotation_g[0]) * spriteExtent_g[0].y
+                  , cos(spriteRotation_g[0]) * spriteExtent_g[0].y
                   );
 
   tintColor = spriteTint_g[0];
@@ -151,29 +163,29 @@ void main() {
   cornerPos.xy -= extX;
   cornerPos.xy -= extY;
 
-  texCoord.x -= spriteUVExtend_g[0].x;
-  texCoord.y -= spriteUVExtend_g[0].y;
+  texCoord.x -= spriteUVExtent_g[0].x;
+  texCoord.y -= spriteUVExtent_g[0].y;
   gl_Position = mvp * cornerPos;
   EmitVertex();
 
   cornerPos.xy += 2 * extX;
   gl_Position = mvp * cornerPos;
 
-  texCoord.x += 2 * spriteUVExtend_g[0].x;
+  texCoord.x += 2 * spriteUVExtent_g[0].x;
   EmitVertex();
 
   cornerPos.xy -= 2 * extX;
   cornerPos.xy += 2 * extY;
   gl_Position = mvp * cornerPos;
 
-  texCoord.x -= 2 * spriteUVExtend_g[0].x;
-  texCoord.y += 2 * spriteUVExtend_g[0].y;
+  texCoord.x -= 2 * spriteUVExtent_g[0].x;
+  texCoord.y += 2 * spriteUVExtent_g[0].y;
   EmitVertex();
 
   cornerPos.xy += 2 * extX;
   gl_Position = mvp * cornerPos;
 
-  texCoord.x += 2 * spriteUVExtend_g[0].x;
+  texCoord.x += 2 * spriteUVExtent_g[0].x;
   EmitVertex();
   EndPrimitive();
 }

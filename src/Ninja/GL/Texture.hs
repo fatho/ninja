@@ -104,6 +104,8 @@ type TextureType = GLenum
 class TextureData a d | a -> d where
   withRawTexture :: a -> (TextureFormat -> TextureType -> d GLsizei -> Ptr () -> IO ()) -> IO ()
 
+-- | Note that OpenGL requires the texture origin in the bottom left-hand corner, whereas JuicyPixels uses the top left-hand corner.
+-- Therefore, a copy of the image is flipped on the fly before being loaded.
 instance TextureData JP.DynamicImage V2 where
   withRawTexture tex f = case tex of
         JP.ImageY8 img -> go (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA8) GL_RGBA GL_UNSIGNED_BYTE
@@ -232,6 +234,7 @@ instance TextureAccess V3 where
 
 -- * Texture Parameters
 
+-- | Wraps texture wrapping enum values.
 newtype TextureWrap = TextureWrap { fromTextureWrap :: GLenum } deriving (Eq, Ord, Show)
 
 -- | Controls the border color used for 'GL_CLAMP_TO_BORDER'.

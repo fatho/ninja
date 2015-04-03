@@ -58,9 +58,9 @@ blendFunc = makeStateVar g s where
 
 -- | Globalls controls the blend color.
 blendColor :: StateVar Color
-blendColor = makeStateVar g s where
-  g = withPtrOut (glGetFloatv GL_BLEND_COLOR . castPtr)
-  s (V4 r g b a) = glBlendColor r g b a
+blendColor = makeStateVar gc sc where
+  gc = withPtrOut (glGetFloatv GL_BLEND_COLOR . castPtr)
+  sc (V4 r g b a) = glBlendColor r g b a
 
 -- | Temporarily enables the specified blending functions.
 withBlending :: BlendEquation -> BlendFunc -> Maybe Color -> IO a -> IO a
