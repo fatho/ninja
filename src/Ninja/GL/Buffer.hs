@@ -63,14 +63,21 @@ instance Storable a => BufferData (VS.Vector a) where
   withRawData vs f = liftBaseOp (VS.unsafeWith vs) $ \p -> f (fromIntegral $ VS.length vs * sizeOf (undefined :: a)) (castPtr p)
   fromRawData size f = do
     buf <- liftIO $ mallocForeignPtrBytes (fromIntegral size)
-    control $ \runInBase ->
-      withForeignPtr buf (runInBase . f . castPtr)
+    () <- liftBaseOp (withForeignPtr buf) (f . castPtr)
     return $ VS.unsafeFromForeignPtr0 buf (fromIntegral size `div` sizeOf (undefined :: a))
 
 instance Storable a => BufferData [a] where
-  withRawData vs f = liftIO $ allocaArray l $ \p -> pokeArray p vs >> f (fromIntegral $ l * sizeOf (undefined :: a)) (castPtr p)
+  withRawData vs f = liftBaseOp (allocaArray l) $ \p -> do
+      liftIO (pokeArray p vs)
+      f (fromIntegral $ l * sizeOf (undefined :: a)) (castPtr p)
     where l = length vs
-  fromRawData size f = liftIO $ allocaArray l $ \p -> f (castPtr p) >> peekArray l p
+  fromRawData size f = do
+      (st, arr) <- liftBaseWith $ \runInBase -> allocaArray l $ \p -> do
+        st <- runInBase (f (castPtr p))
+        arr <- peekArray l p
+        return (st, arr)
+      () <- restoreM st
+      return arr
     where l = fromIntegral size `div` sizeOf (undefined :: a)
 
 -- | Streams data from or to the buffer, see 'glBufferData'.
