@@ -1,10 +1,13 @@
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Ninja.GL.Program where
 
 import           Control.Applicative
 import           Control.Exception
 import           Control.Monad
 import           Control.Monad.IO.Class
+import           Control.Monad.Trans.Control
 import           Control.Monad.Trans.Resource
 import           Data.Coerce
 import           Data.Default.Class
@@ -37,11 +40,11 @@ instance Default Program where
   def = Program 0
 
 -- | Attaches a shader to a program.
-attachShader :: Program -> Shader -> IO ()
+attachShader :: MonadIO m => Program -> Shader -> m ()
 attachShader prog shader = glAttachShader (objectId prog) (objectId shader)
 
 -- | Detaches a shader from a program.
-detachShader :: Program -> Shader -> IO ()
+detachShader :: MonadIO m => Program -> Shader -> m ()
 detachShader prog shader = glDetachShader (objectId prog) (objectId shader)
 
 -- | Gets or sets the shaders attached to the program.
@@ -57,12 +60,12 @@ attachedShaders prog = makeStateVar g s where
     mapM_ (attachShader prog) xs
 
 -- | Links a shader program.
-linkProgram :: Program -> IO ()
+linkProgram :: (MonadBaseControl IO m, MonadIO m) => Program -> m ()
 linkProgram prog = do
   glLinkProgram (objectId prog)
   success <- (GL_FALSE /=) <$> withPtrOut (glGetProgramiv (objectId prog) GL_LINK_STATUS)
   logsize <- withPtrOut $ glGetProgramiv (objectId prog) GL_INFO_LOG_LENGTH
-  logstr <- allocaBytes (fromIntegral logsize) $ \cstr -> do
+  logstr <- liftIO $ allocaBytes (fromIntegral logsize) $ \cstr -> do
               glGetProgramInfoLog (objectId prog) logsize nullPtr cstr
               peekCString cstr
   unless success $ throw $ ShaderCompileError logstr
@@ -74,7 +77,7 @@ usedProgram = makeStateVar g s where
   s = glUseProgram . objectId
 
 -- | Sets the shader program for the duration of the supplied action and restores it afterwards.
-withProgram :: Program -> IO a -> IO a
+withProgram :: (MonadBaseControl IO m, MonadIO m) => Program -> m a -> m a
 withProgram = withVar usedProgram
 
 -- | Creates a program from a list of already compiled shaders.
@@ -86,11 +89,11 @@ createProgramFromShaders shaders = do
   return prog
 
 -- | Creates a shader program from source code.
-createProgramFromSource :: (ShaderSource a)
+createProgramFromSource :: (MonadBaseControl IO m, MonadThrow m, MonadIO m, ShaderSource a)
   => [a] -- ^ vertex shaders
   -> [a] -- ^ geometry shaders
   -> [a] -- ^ fragment shaders
-  -> IO Program
+  -> m Program
 createProgramFromSource vertSource geomSource fragSource = runResourceT $ do
   vs <- mapM (liftM snd . createShaderFromSource GL_VERTEX_SHADER) vertSource
   gs <- mapM (liftM snd . createShaderFromSource GL_GEOMETRY_SHADER) geomSource

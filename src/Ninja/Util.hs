@@ -1,13 +1,15 @@
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 module Ninja.Util where
 
 import qualified Codec.Picture                as JP
 import qualified Codec.Picture.Types          as JP
 import           Control.Applicative
-import           Control.Exception
+import           Control.Exception.Lifted
 import           Control.Monad
 import           Control.Monad.IO.Class
+import           Control.Monad.Trans.Control
 import           Data.StateVar
 import qualified Data.Vector.Storable.Mutable as VSM
 import           Foreign.Marshal.Alloc
@@ -17,7 +19,7 @@ import           Foreign.Storable
 import           System.IO.Unsafe
 
 -- | Modifies a StateVar locally.
-withVar :: StateVar a -> a -> IO b -> IO b
+withVar :: (MonadBaseControl IO m, MonadIO m) => StateVar a -> a -> m b -> m b
 withVar var val act = do
   oldVal <- get var
   finally
@@ -25,12 +27,12 @@ withVar var val act = do
     (var $= oldVal)
 
 -- | Allocates memory and passes the pointer to the function, returning the contents afterwards.
-withPtrOut :: (MonadIO m, Storable a) => (Ptr a -> IO ()) -> m a
-withPtrOut f = liftIO $ alloca $ liftM2 (>>) f peek
+withPtrOut :: (MonadBaseControl IO m, MonadIO m, Storable a) => (Ptr a -> m ()) -> m a
+withPtrOut f = liftBaseOp alloca $ liftM2 (>>) f (liftIO . peek)
 
 -- | Allocates memory, copies the supplied value to that location and passes the pointer to the given function.
-withPtrIn :: Storable a => a -> (Ptr a -> IO b) -> IO b
-withPtrIn v f = alloca $ \p -> poke p v >> f p
+withPtrIn :: (MonadBaseControl IO m, MonadIO m, Storable a) => a -> (Ptr a -> m b) -> m b
+withPtrIn v f = liftBaseOp alloca $ liftM2 (>>) (liftIO . flip poke v) f
 
 -- | Combines two StateVars into one.
 combineStateVars :: ((a,b) -> c) -> (c -> (a,b)) -> StateVar a -> StateVar b -> StateVar c
@@ -53,7 +55,7 @@ flipRawTextureData stride height ptr =
 -- | Flips an image by creating a copy.
 flipImage :: forall px. (Storable (JP.PixelBaseComponent px), JP.Pixel px) => JP.Image px -> JP.Image px
 flipImage img = unsafePerformIO $ do -- Don't worry, should actually be totally safe.
-  mimg@(JP.MutableImage w h mvs) <- JP.thawImage img
+  mimg@(JP.MutableImage w h mvs) <- JP.thawImage img -- <- thawImage creates a copy
   let isize = sizeOf (undefined :: JP.PixelBaseComponent px) * JP.componentCount (undefined :: px)
   VSM.unsafeWith mvs $ \ptr -> flipRawTextureData (w * isize) h ptr
   JP.unsafeFreezeImage mimg

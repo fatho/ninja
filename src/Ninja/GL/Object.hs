@@ -8,8 +8,6 @@ import           Graphics.GL.Types
 -- | Generic interface to an OpenGL object.
 -- <https://www.opengl.org/wiki/OpenGL_Object>
 class Object a where
-  {-# MINIMAL objectId, (delete | delete1), isA #-}
-
   -- | glDelete* call
   delete :: MonadIO m => [a] -> m ()
   delete = mapM_ delete1
@@ -24,10 +22,10 @@ class Object a where
   -- | Corresponds to OpenGL 'glIs*' functions.
   isA :: MonadIO m => a -> m Bool
 
+  {-# MINIMAL objectId, (delete | delete1), isA #-}
+
 -- | Generic interface to an object that also can be user generated.
 class Object a => GenObject a where
-  {-# MINIMAL (gen | gen1) #-}
-
   -- | glGen* call, creating multiple objects at once
   gen :: MonadIO m => Int -> m [a]
   gen n  = replicateM n gen1
@@ -35,6 +33,8 @@ class Object a => GenObject a where
   -- | Variant of 'gen' to generate just one object.
   gen1 :: MonadIO m => m a
   gen1 = head `liftM` gen 1
+
+  {-# MINIMAL (gen | gen1) #-}
 
 -- | Allocates an OpenGL object in a 'MonadResource' context.
 allocateObject :: (MonadResource m, GenObject a) => m (ReleaseKey, a)

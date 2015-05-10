@@ -22,6 +22,7 @@ executable yolo-ninja
                         Ninja.GL.Blending
                         Ninja.GL.Buffer
                         Ninja.GL.Exception
+                        Ninja.GL.Framebuffer
                         Ninja.GL.Object
                         Ninja.GL.Program
                         Ninja.GL.Shader
@@ -42,6 +43,8 @@ executable yolo-ninja
                       , transformers
                       , mtl
                       , lens
+                      , monad-control
+                      , lifted-base
                       , IfElse
                       , data-default-class
                       , StateVar
@@ -49,6 +52,7 @@ executable yolo-ninja
                       , linear
                       , bytestring
                       , directory
+                      , distributive
                       , JuicyPixels
                       , raw-strings-qq
                       , containers

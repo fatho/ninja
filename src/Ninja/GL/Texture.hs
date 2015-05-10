@@ -13,6 +13,7 @@ import           Control.Applicative
 import           Control.Lens                                  hiding (coerce)
 import           Control.Monad
 import           Control.Monad.IO.Class
+import           Control.Monad.Trans.Control
 import           Data.Coerce
 import           Data.Default.Class
 import           Data.StateVar
@@ -32,10 +33,13 @@ import           Ninja.GL.Types
 import           Ninja.Util
 
 -- | Encapsulates an OpenGL texture target.
-data TextureTarget = TextureTarget GLenum GLenum deriving (Eq, Ord, Show)
+data TextureTarget = TextureTarget { texTargetBinding :: GLenum, texTarget :: GLenum } deriving (Eq, Ord, Show)
 
 -- | Type of a texture unit 'GL_TEXTURE0', 'GL_TEXTURE1', ...
 type TextureUnit = GLenum
+
+-- | Type of mipmap level indices.
+type MipmapLevel = Int
 
 -- | Texture handle
 newtype Texture = Texture GLuint deriving (Eq, Ord, Show)
@@ -60,7 +64,7 @@ activeTexture = makeStateVar g s where
   s = glActiveTexture
 
 -- | Changes the texture unit for the duration of the supplied action.
-withActiveTexture :: TextureUnit -> IO a -> IO a
+withActiveTexture :: (MonadBaseControl IO m, MonadIO m) => TextureUnit -> m a -> m a
 withActiveTexture = withVar activeTexture
 
 -- | Controls the currently bound texture for a texture target.
@@ -70,14 +74,14 @@ boundTexture (TextureTarget binding target) = makeStateVar g s where
   s tex = glBindTexture target (objectId tex)
 
 -- | Changes the texture for the duration of the supplied action.
-withTexture :: TextureTarget -> Texture -> IO a -> IO a
+withTexture :: (MonadBaseControl IO m, MonadIO m) => TextureTarget -> Texture -> m a -> m a
 withTexture target = withVar (boundTexture target)
 
 -- * Textures from file
 
 -- | Loads a texture from a file using 'JP.readImage'.
-textureFromFile :: FilePath -> Bool -> IO Texture
-textureFromFile path generateMipmaps = do
+textureFromFile :: MonadIO m => FilePath -> Bool -> m Texture
+textureFromFile path generateMipmaps = liftIO $ do
   img <- JP.readImage path >>= \case
     Left err -> ioError $ userError $ "failed to load image: " ++ err
     Right x -> return x
@@ -102,25 +106,26 @@ type TextureType = GLenum
 
 -- | Object convertible to texture data. d is the dimension and should be either 'V1', 'V2' or 'V3'.
 class TextureData a d | a -> d where
-  withRawTexture :: a -> (TextureFormat -> TextureType -> d GLsizei -> Ptr () -> IO ()) -> IO ()
+  withRawTexture :: (MonadBaseControl IO m, MonadIO m) => a -> (TextureFormat -> TextureType -> d GLsizei -> Ptr () -> m ()) -> m ()
 
 -- | Note that OpenGL requires the texture origin in the bottom left-hand corner, whereas JuicyPixels uses the top left-hand corner.
 -- Therefore, a copy of the image is flipped on the fly before being loaded.
 instance TextureData JP.DynamicImage V2 where
-  withRawTexture tex f = case tex of
-        JP.ImageY8 img -> go (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA8) GL_RGBA GL_UNSIGNED_BYTE
-        JP.ImageY16 img -> go (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA16) GL_RGBA GL_UNSIGNED_SHORT
-        JP.ImageYF img -> go (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBF) GL_RGBA GL_UNSIGNED_SHORT
-        JP.ImageYA8 img -> go (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA8) GL_RGBA GL_UNSIGNED_BYTE
-        JP.ImageYA16 img -> go (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA16) GL_RGBA GL_UNSIGNED_SHORT
-        JP.ImageRGB8 img -> go (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA8) GL_RGBA GL_UNSIGNED_BYTE
-        JP.ImageRGB16 img -> go (flipImage img) GL_RGB GL_UNSIGNED_SHORT
-        JP.ImageRGBF img -> go (flipImage img) GL_RGB GL_FLOAT
-        JP.ImageRGBA8 img -> go (flipImage img) GL_RGBA GL_UNSIGNED_BYTE
-        JP.ImageRGBA16 img -> go (flipImage img) GL_RGBA GL_UNSIGNED_SHORT
-        JP.ImageYCbCr8 img -> go (flipImage $ toRGBA8 img) GL_RGBA GL_UNSIGNED_BYTE
-        JP.ImageCMYK8 img -> go (flipImage $ toRGBA8 img) GL_RGBA GL_UNSIGNED_BYTE
-        JP.ImageCMYK16 img -> go (flipImage $ toRGBA16 img :: JP.Image JP.PixelRGBA16) GL_RGBA GL_UNSIGNED_SHORT
+  withRawTexture tex f = control $ \runInBase -> let f' = ((.).(.).(.).(.)) runInBase f in
+      case tex of
+        JP.ImageY8 img -> go f' (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA8) GL_RGBA GL_UNSIGNED_BYTE
+        JP.ImageY16 img -> go f' (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA16) GL_RGBA GL_UNSIGNED_SHORT
+        JP.ImageYF img -> go f' (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBF) GL_RGBA GL_UNSIGNED_SHORT
+        JP.ImageYA8 img -> go f' (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA8) GL_RGBA GL_UNSIGNED_BYTE
+        JP.ImageYA16 img -> go f' (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA16) GL_RGBA GL_UNSIGNED_SHORT
+        JP.ImageRGB8 img -> go f' (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA8) GL_RGBA GL_UNSIGNED_BYTE
+        JP.ImageRGB16 img -> go f' (flipImage img) GL_RGB GL_UNSIGNED_SHORT
+        JP.ImageRGBF img -> go f' (flipImage img) GL_RGB GL_FLOAT
+        JP.ImageRGBA8 img -> go f' (flipImage img) GL_RGBA GL_UNSIGNED_BYTE
+        JP.ImageRGBA16 img -> go f' (flipImage img) GL_RGBA GL_UNSIGNED_SHORT
+        JP.ImageYCbCr8 img -> go f' (flipImage $ toRGBA8 img) GL_RGBA GL_UNSIGNED_BYTE
+        JP.ImageCMYK8 img -> go f' (flipImage $ toRGBA8 img) GL_RGBA GL_UNSIGNED_BYTE
+        JP.ImageCMYK16 img -> go f' (flipImage $ toRGBA16 img :: JP.Image JP.PixelRGBA16) GL_RGBA GL_UNSIGNED_SHORT
     where
         toRGBA8 :: JP.ColorSpaceConvertible a JP.PixelRGB8 => JP.Image a -> JP.Image JP.PixelRGBA8
         toRGBA8 x = JP.promoteImage (JP.convertImage x :: JP.Image JP.PixelRGB8)
@@ -128,8 +133,9 @@ instance TextureData JP.DynamicImage V2 where
         toRGBA16 x = JP.promoteImage (JP.convertImage x :: JP.Image JP.PixelRGB16)
 
         go :: Storable (JP.PixelBaseComponent a)
-            => JP.Image a -> GLenum -> GLenum -> IO ()
-        go img fmt dataType = VS.unsafeWith (JP.imageData img) $ \dataArr ->
+            => (TextureFormat -> TextureType -> V2 GLsizei -> Ptr () -> IO c)
+            -> JP.Image a -> GLenum -> GLenum -> IO c
+        go f img fmt dataType = VS.unsafeWith (JP.imageData img) $ \dataArr ->
             f fmt dataType
                 (fromIntegral <$> V2 (JP.imageWidth img) (JP.imageHeight img))
                 (castPtr dataArr)
@@ -137,19 +143,19 @@ instance TextureData JP.DynamicImage V2 where
 -- | Provides generic access to textures of varying dimensions.
 class TextureAccess d where
   -- | Uploads image data and allocates storage in the process.
-  textureImage :: (TextureData a d) => TextureTarget -> Int -> TextureInternalFormat -> SettableStateVar a
+  textureImage :: (TextureData a d) => TextureTarget -> MipmapLevel -> TextureInternalFormat -> SettableStateVar a
   -- | Initializes a multisample texture.
-  textureImageMultisample :: TextureTarget -> Int -> TextureInternalFormat -> d GLsizei -> Bool -> IO ()
+  textureImageMultisample :: (MonadIO m) => TextureTarget -> MipmapLevel -> TextureInternalFormat -> d GLsizei -> Bool -> m ()
   -- | Configures texture wrapping.
   textureWrap :: TextureTarget -> StateVar (d TextureWrap)
   -- | Only allocates storage for the texture.
-  textureStorage :: TextureTarget -> Int -> TextureInternalFormat -> d GLsizei -> IO ()
+  textureStorage :: (MonadIO m) => TextureTarget -> Int -> TextureInternalFormat -> d GLsizei -> m ()
   -- | Only allocates storage for a multisample texture.
-  textureStorageMultisample :: TextureTarget -> Int -> TextureInternalFormat -> d GLsizei -> Bool -> IO ()
+  textureStorageMultisample :: (MonadIO m) => TextureTarget -> Int -> TextureInternalFormat -> d GLsizei -> Bool -> m ()
   -- | Accesses a subimage of a texture beginning at the given offset.
-  textureSubImage :: (TextureData a d) => TextureTarget -> Int -> d GLint -> SettableStateVar a
+  textureSubImage :: (TextureData a d) => TextureTarget -> MipmapLevel -> d GLint -> SettableStateVar a
   -- | Clears a part of the texture
-  textureClearSubImage :: Texture -> Int -> d GLint -> d GLsizei -> Color -> IO ()
+  textureClearSubImage :: (MonadIO m) => Texture -> MipmapLevel -> d GLint -> d GLsizei -> Color -> m ()
 
 -- | Clears the texture using the given color.
 textureClearImage :: Texture -> Int -> Color -> IO ()
@@ -179,7 +185,7 @@ instance TextureAccess V1 where
     $ \fmt dataTy (V1 w) dat ->
         glTexSubImage1D target (fromIntegral lvl) x w fmt dataTy dat
 
-  textureClearSubImage tex lvl (V1 x) (V1 w) col = withPtrIn col $ \ptr ->
+  textureClearSubImage tex lvl (V1 x) (V1 w) col = liftIO $ withPtrIn col $ \ptr ->
     TexClear.glClearTexSubImage (objectId tex) (fromIntegral lvl) x 0 0 w 1 1 GL_RGBA GL_FLOAT (castPtr ptr)
 
 instance TextureAccess V2 where
@@ -204,7 +210,7 @@ instance TextureAccess V2 where
     $ \fmt dataTy (V2 w h) dat ->
         glTexSubImage2D target (fromIntegral lvl) x y w h fmt dataTy dat
 
-  textureClearSubImage tex lvl (V2 x y) (V2 w h) col = withPtrIn col $ \ptr ->
+  textureClearSubImage tex lvl (V2 x y) (V2 w h) col = liftIO $ withPtrIn col $ \ptr ->
     TexClear.glClearTexSubImage (objectId tex) (fromIntegral lvl) x y 0 w h 1 GL_RGBA GL_FLOAT (castPtr ptr)
 
 instance TextureAccess V3 where
@@ -229,7 +235,7 @@ instance TextureAccess V3 where
     $ \fmt dataTy (V3 w h d) dat ->
         glTexSubImage3D target (fromIntegral lvl) x y z w h d fmt dataTy dat
 
-  textureClearSubImage tex lvl (V3 x y z) (V3 w h d) col = withPtrIn col $ \ptr ->
+  textureClearSubImage tex lvl (V3 x y z) (V3 w h d) col = liftIO $ withPtrIn col $ \ptr ->
     TexClear.glClearTexSubImage (objectId tex) (fromIntegral lvl) x y z w h d GL_RGBA GL_FLOAT (castPtr ptr)
 
 -- * Texture Parameters

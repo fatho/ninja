@@ -1,14 +1,17 @@
-{-# LANGUAGE PatternSynonyms     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 module Ninja.GL.Buffer where
 
 import           Control.Applicative
 import           Control.Monad
 import           Control.Monad.IO.Class
+import           Control.Monad.Trans.Control
 import           Data.Coerce
 import           Data.Default.Class
 import           Data.StateVar
-import qualified Data.Vector.Storable   as VS
+import qualified Data.Vector.Storable        as VS
 import           Foreign.ForeignPtr
 import           Foreign.Marshal.Alloc
 import           Foreign.Marshal.Array
@@ -45,22 +48,23 @@ instance Default (Buffer a) where
 -- | Interface to buffer data. Must be able to provide a size and a pointer to the data.
 class BufferData a where
   -- | Call the argument function with size and pointer to raw data.
-  withRawData :: MonadIO m => a -> (GLsizeiptr -> Ptr () -> IO ()) -> m ()
+  withRawData :: (MonadBaseControl IO m, MonadIO m) => a -> (GLsizeiptr -> Ptr () -> m ()) -> m ()
   -- | Provide a buffer of the given size for the data to be read into.
-  fromRawData :: MonadIO m => GLsizeiptr -> (Ptr () -> IO ()) -> m a
+  fromRawData :: (MonadBaseControl IO m, MonadIO m) => GLsizeiptr -> (Ptr () -> m ()) -> m a
 
 -- | Buffer data with a size but without actual data.
 data NullData = NullData GLsizeiptr
 
 instance BufferData NullData where
-  withRawData (NullData size) f = liftIO $ f size nullPtr
-  fromRawData size f = liftIO (f nullPtr) >> return (NullData size)
+  withRawData (NullData size) f = f size nullPtr
+  fromRawData size f = f nullPtr >> return (NullData size)
 
 instance Storable a => BufferData (VS.Vector a) where
-  withRawData vs f = liftIO $ VS.unsafeWith vs $ \p -> f (fromIntegral $ VS.length vs * sizeOf (undefined :: a)) (castPtr p)
-  fromRawData size f = liftIO $ do
-    buf <- mallocForeignPtrBytes (fromIntegral size)
-    withForeignPtr buf (f . castPtr)
+  withRawData vs f = liftBaseOp (VS.unsafeWith vs) $ \p -> f (fromIntegral $ VS.length vs * sizeOf (undefined :: a)) (castPtr p)
+  fromRawData size f = do
+    buf <- liftIO $ mallocForeignPtrBytes (fromIntegral size)
+    control $ \runInBase ->
+      withForeignPtr buf (runInBase . f . castPtr)
     return $ VS.unsafeFromForeignPtr0 buf (fromIntegral size `div` sizeOf (undefined :: a))
 
 instance Storable a => BufferData [a] where
@@ -82,7 +86,7 @@ bufferSubData (BufferTarget _ t) off size = makeStateVar g s where
 
 -- | Returns the size of a buffer.
 bufferSize :: BufferTarget -> GettableStateVar GLsizeiptr
-bufferSize (BufferTarget _ t) = makeGettableStateVar $ 
+bufferSize (BufferTarget _ t) = makeGettableStateVar $
   fromIntegral <$> withPtrOut (glGetBufferParameteriv t GL_BUFFER_SIZE)
 
 -- | Returns the size of a buffer.

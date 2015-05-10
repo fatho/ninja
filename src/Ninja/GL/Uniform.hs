@@ -6,6 +6,7 @@ module Ninja.GL.Uniform where
 import           Control.Applicative
 import           Control.Monad.IO.Class
 import           Data.Coerce
+import           Data.Distributive
 import           Data.StateVar
 import qualified Data.Vector.Storable   as VS
 import           Foreign.C.String
@@ -203,14 +204,16 @@ instance HasSetter (Uniform (VS.Vector (V4 GLuint))) (VS.Vector (V4 GLuint)) whe
 -- * Matrix based uniforms
 
 -- | Generic function to upload uniform matrix.
-uniformMatrix :: (MonadIO m, Storable a) => (GLint -> GLsizei -> GLboolean -> Ptr GLfloat -> IO ()) -> Uniform a -> a -> m ()
-uniformMatrix loadMat loc mat = liftIO $ withPtrIn mat $ loadMat (coerce loc) 1 GL_FALSE . castPtr
+uniformMatrix :: (MonadIO m, Distributive g, Functor f, Storable (g (f a)))
+    => (GLint -> GLsizei -> GLboolean -> Ptr GLfloat -> IO ()) -> Uniform (f (g a)) -> f (g a) -> m ()
+uniformMatrix loadMat loc mat = liftIO $ withPtrIn (transpose mat) $ loadMat (coerce loc) 1 GL_FALSE . castPtr
 {-# INLINE uniformMatrix #-}
 
 -- | Generic function to upload uniform matrix.
-uniformMatrixVector :: (MonadIO m, Storable a) => (GLint -> GLsizei -> GLboolean -> Ptr GLfloat -> IO ())
-  -> Uniform (VS.Vector a) -> VS.Vector a -> m ()
-uniformMatrixVector loadMat loc mats = liftIO $ VS.unsafeWith mats $ loadMat (coerce loc) (fromIntegral $ VS.length mats) GL_FALSE . castPtr
+uniformMatrixVector :: (MonadIO m, Distributive g, Functor f, Storable (g (f a)), Storable (f (g a)))
+    => (GLint -> GLsizei -> GLboolean -> Ptr GLfloat -> IO ())
+    -> Uniform (VS.Vector (f (g a))) -> VS.Vector (f (g a)) -> m ()
+uniformMatrixVector loadMat loc mats = liftIO $ VS.unsafeWith (VS.map transpose mats) $ loadMat (coerce loc) (fromIntegral $ VS.length mats) GL_FALSE . castPtr
 
 instance HasSetter (Uniform (M22 Float)) (M22 Float) where
   ($=) = uniformMatrix glUniformMatrix2fv
@@ -238,3 +241,30 @@ instance HasSetter (Uniform (M34 Float)) (M34 Float) where
 
 instance HasSetter (Uniform (M43 Float)) (M43 Float) where
   ($=) = uniformMatrix glUniformMatrix4x3fv
+
+instance HasSetter (Uniform (VS.Vector (M22 Float))) (VS.Vector (M22 Float)) where
+  ($=) = uniformMatrixVector glUniformMatrix2fv
+
+instance HasSetter (Uniform (VS.Vector (M33 Float))) (VS.Vector (M33 Float)) where
+  ($=) = uniformMatrixVector glUniformMatrix3fv
+
+instance HasSetter (Uniform (VS.Vector (M44 Float))) (VS.Vector (M44 Float)) where
+  ($=) = uniformMatrixVector glUniformMatrix4fv
+
+instance HasSetter (Uniform (VS.Vector (M23 Float))) (VS.Vector (M23 Float)) where
+  ($=) = uniformMatrixVector glUniformMatrix2x3fv
+
+instance HasSetter (Uniform (VS.Vector (M32 Float))) (VS.Vector (M32 Float)) where
+  ($=) = uniformMatrixVector glUniformMatrix3x2fv
+
+instance HasSetter (Uniform (VS.Vector (M24 Float))) (VS.Vector (M24 Float)) where
+  ($=) = uniformMatrixVector glUniformMatrix2x4fv
+
+instance HasSetter (Uniform (VS.Vector (M42 Float))) (VS.Vector (M42 Float)) where
+  ($=) = uniformMatrixVector glUniformMatrix4x2fv
+
+instance HasSetter (Uniform (VS.Vector (M34 Float))) (VS.Vector (M34 Float)) where
+  ($=) = uniformMatrixVector glUniformMatrix3x4fv
+
+instance HasSetter (Uniform (VS.Vector (M43 Float))) (VS.Vector (M43 Float)) where
+  ($=) = uniformMatrixVector glUniformMatrix4x3fv

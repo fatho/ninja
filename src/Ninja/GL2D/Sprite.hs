@@ -89,7 +89,7 @@ drawWithTexture SpriteRenderer{..} tex sprites =
     withProgram spriteRendererProgram $
     withVertexArray spriteRendererVAO $ do
        boundBuffer ArrayBuffer $= spriteRendererBuffer
-       spriteRendererMVP $= eye4
+       spriteRendererMVP $= identity
        activeTexture $= GL_TEXTURE0
        boundTexture Texture2D $= tex
        go sprites

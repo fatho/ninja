@@ -1,24 +1,25 @@
-{-# LANGUAGE DataKinds  #-}
-{-# LANGUAGE LambdaCase, ForeignFunctionInterface #-}
+{-# LANGUAGE DataKinds                #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE LambdaCase               #-}
 module Main where
 
-import qualified Codec.Picture                as JP
+import qualified Codec.Picture                   as JP
 import           Control.Exception
 import           Control.Monad
-import           Control.Monad.Except
 import           Control.Monad.IfElse
+import           Control.Monad.IO.Class
 import           Data.Bits
-import           Data.Fixed (mod')
+import           Data.Fixed                      (mod')
 import           Data.IORef
-import qualified Data.Vector.Storable         as VS
+import qualified Data.Vector.Storable            as VS
 import           Foreign.C.String
 import           Foreign.Ptr
 import           Graphics.GL.Core33
 import qualified Graphics.GL.Ext.ARB.DebugOutput as Dbg
 import           Graphics.GL.Types
-import qualified Graphics.UI.GLFW             as GLFW
+import qualified Graphics.UI.GLFW                as GLFW
 import           Linear
-import           System.Directory             as Dir
+import           System.Directory                as Dir
 import           System.IO
 
 import           Ninja.GL
@@ -60,7 +61,7 @@ main = withGLFW (Windowed 800 800) "Yolo Ninja" hints $ \win -> do
     textureMinFilter Texture2D $= FilterNearest
     textureMagFilter Texture2D $= FilterNearest
     textureStorage Texture2D 1 GL_RGBA8 (V2 2 2)
-    textureSubImage Texture2D 0 0 $= JP.ImageRGBA8 
+    textureSubImage Texture2D 0 0 $= JP.ImageRGBA8
       (JP.Image 2 2 (VS.fromList [ 255, 0, 0, 255,  0, 255, 0, 255
                                  , 0, 0, 255, 255,  255, 255, 0, 255 ]))
     cloudTex <- textureFromFile "data/tex/cloud.png" True
@@ -81,7 +82,7 @@ main = withGLFW (Windowed 800 800) "Yolo Ninja" hints $ \win -> do
       --let t = 0.5
       let rnd co = snd (properFraction (sin (co `dot` V2 12.9898 78.233) * 43758.5453) :: (Int, Float))
 
-      let f t a = let 
+      let f t a = let
                       t' = t `mod'` 4
                       tmp = rnd (V2 (1+a) a)
                       speed = max 0.3 $ if tmp < 0.5 then 0.5 * (sqrt $ 2 * tmp) else 0.5 + 0.5 * (sqrt $ 2 * tmp)
@@ -92,7 +93,7 @@ main = withGLFW (Windowed 800 800) "Yolo Ninja" hints $ \win -> do
                           (realToFrac $ fadeout) -- (fadeout *^ V4 (0.27 + 0.73 * fadeout) (0.25 - fadeout * 0.25) 0 1)
       let sprites = map (f (realToFrac time * 2) . (/180) . (*pi)) [0,2..359]
 
-      drawWithTexture renderer wallTex 
+      drawWithTexture renderer wallTex
         [ SpriteVertex (V3 (-0.6) (-0.6) 0) 0.4 0.5 0.5 0 1
         , SpriteVertex (V3 (-0.6)   0.6  0) 0.4 0.5 0.5 0 1
         , SpriteVertex (V3   0.6  (-0.6) 0) 0.4 0.5 0.5 0 1
@@ -108,9 +109,9 @@ main = withGLFW (Windowed 800 800) "Yolo Ninja" hints $ \win -> do
     putStrLn "Exit"
     deleteSpriteRenderer renderer
   where
-    hints = GLFW.WindowHint'OpenGLDebugContext True 
+    hints = GLFW.WindowHint'OpenGLDebugContext True
           : GLFW.WindowHint'Resizable False
-          : GLFW.WindowHint'Samples 4 
+          : GLFW.WindowHint'Samples 4
           : openGL33Core
 
 
