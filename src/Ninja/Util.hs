@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
@@ -8,7 +9,7 @@ import qualified Codec.Picture.Types          as JP
 import           Control.Applicative
 import           Control.Exception.Lifted
 import           Control.Monad
-import           Control.Monad.IO.Class
+import           Control.Monad.Base
 import           Control.Monad.Trans.Control
 import           Data.StateVar
 import qualified Data.Vector.Storable.Mutable as VSM
@@ -18,8 +19,10 @@ import           Foreign.Ptr
 import           Foreign.Storable
 import           System.IO.Unsafe
 
+import           Ninja.Types
+
 -- | Modifies a StateVar locally.
-withVar :: (MonadBaseControl IO m, MonadIO m) => StateVar a -> a -> m b -> m b
+withVar :: (ControlIO m) => StateVar a -> a -> m b -> m b
 withVar var val act = do
   oldVal <- get var
   finally
@@ -27,12 +30,12 @@ withVar var val act = do
     (var $= oldVal)
 
 -- | Allocates memory and passes the pointer to the function, returning the contents afterwards.
-withPtrOut :: (MonadBaseControl IO m, MonadIO m, Storable a) => (Ptr a -> m ()) -> m a
-withPtrOut f = liftBaseOp alloca $ liftM2 (>>) f (liftIO . peek)
+withPtrOut :: (ControlIO m, Storable a) => (Ptr a -> m ()) -> m a
+withPtrOut f = liftBaseOp alloca $ liftM2 (>>) f (liftBase . peek)
 
 -- | Allocates memory, copies the supplied value to that location and passes the pointer to the given function.
-withPtrIn :: (MonadBaseControl IO m, MonadIO m, Storable a) => a -> (Ptr a -> m b) -> m b
-withPtrIn v f = liftBaseOp alloca $ liftM2 (>>) (liftIO . flip poke v) f
+withPtrIn :: (ControlIO m, Storable a) => a -> (Ptr a -> m b) -> m b
+withPtrIn v f = liftBaseOp alloca $ liftM2 (>>) (liftBase . flip poke v) f
 
 -- | Combines two StateVars into one.
 combineStateVars :: ((a,b) -> c) -> (c -> (a,b)) -> StateVar a -> StateVar b -> StateVar c

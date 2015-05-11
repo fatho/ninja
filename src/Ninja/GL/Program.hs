@@ -6,6 +6,7 @@ module Ninja.GL.Program where
 import           Control.Applicative
 import           Control.Exception
 import           Control.Monad
+import           Control.Monad.Base
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.Control
 import           Control.Monad.Trans.Resource
@@ -65,7 +66,7 @@ linkProgram prog = do
   glLinkProgram (objectId prog)
   success <- (GL_FALSE /=) <$> withPtrOut (glGetProgramiv (objectId prog) GL_LINK_STATUS)
   logsize <- withPtrOut $ glGetProgramiv (objectId prog) GL_INFO_LOG_LENGTH
-  logstr <- liftIO $ allocaBytes (fromIntegral logsize) $ \cstr -> do
+  logstr <- liftBase $ allocaBytes (fromIntegral logsize) $ \cstr -> do
               glGetProgramInfoLog (objectId prog) logsize nullPtr cstr
               peekCString cstr
   unless success $ throw $ ShaderCompileError logstr
@@ -98,4 +99,4 @@ createProgramFromSource vertSource geomSource fragSource = runResourceT $ do
   vs <- mapM (liftM snd . createShaderFromSource GL_VERTEX_SHADER) vertSource
   gs <- mapM (liftM snd . createShaderFromSource GL_GEOMETRY_SHADER) geomSource
   fs <- mapM (liftM snd . createShaderFromSource GL_FRAGMENT_SHADER) fragSource
-  liftIO $ createProgramFromShaders (vs ++ gs ++ fs)
+  liftBase $ createProgramFromShaders (vs ++ gs ++ fs)

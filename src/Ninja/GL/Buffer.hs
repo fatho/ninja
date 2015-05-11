@@ -6,6 +6,7 @@ module Ninja.GL.Buffer where
 
 import           Control.Applicative
 import           Control.Monad
+import           Control.Monad.Base
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.Control
 import           Data.Coerce
@@ -48,9 +49,9 @@ instance Default (Buffer a) where
 -- | Interface to buffer data. Must be able to provide a size and a pointer to the data.
 class BufferData a where
   -- | Call the argument function with size and pointer to raw data.
-  withRawData :: (MonadBaseControl IO m, MonadIO m) => a -> (GLsizeiptr -> Ptr () -> m ()) -> m ()
+  withRawData :: (MonadBaseControl IO m) => a -> (GLsizeiptr -> Ptr () -> m ()) -> m ()
   -- | Provide a buffer of the given size for the data to be read into.
-  fromRawData :: (MonadBaseControl IO m, MonadIO m) => GLsizeiptr -> (Ptr () -> m ()) -> m a
+  fromRawData :: (MonadBaseControl IO m) => GLsizeiptr -> (Ptr () -> m ()) -> m a
 
 -- | Buffer data with a size but without actual data.
 data NullData = NullData GLsizeiptr
@@ -62,13 +63,13 @@ instance BufferData NullData where
 instance Storable a => BufferData (VS.Vector a) where
   withRawData vs f = liftBaseOp (VS.unsafeWith vs) $ \p -> f (fromIntegral $ VS.length vs * sizeOf (undefined :: a)) (castPtr p)
   fromRawData size f = do
-    buf <- liftIO $ mallocForeignPtrBytes (fromIntegral size)
+    buf <- liftBase $ mallocForeignPtrBytes (fromIntegral size)
     () <- liftBaseOp (withForeignPtr buf) (f . castPtr)
     return $ VS.unsafeFromForeignPtr0 buf (fromIntegral size `div` sizeOf (undefined :: a))
 
 instance Storable a => BufferData [a] where
   withRawData vs f = liftBaseOp (allocaArray l) $ \p -> do
-      liftIO (pokeArray p vs)
+      liftBase (pokeArray p vs)
       f (fromIntegral $ l * sizeOf (undefined :: a)) (castPtr p)
     where l = length vs
   fromRawData size f = do

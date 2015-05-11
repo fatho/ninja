@@ -44,6 +44,7 @@ executable yolo-ninja
                       , mtl
                       , lens
                       , monad-control
+                      , transformers-base
                       , lifted-base
                       , IfElse
                       , data-default-class

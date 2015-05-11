@@ -39,11 +39,11 @@ type FramebufferAttachement = GLenum
 
 instance Object Framebuffer where
   objectId = coerce
-  delete xs = liftIO $ withArrayLen (coerce xs) $ \n ps -> glDeleteFramebuffers (fromIntegral n) ps
+  delete xs = liftBase $ withArrayLen (coerce xs) $ \n ps -> glDeleteFramebuffers (fromIntegral n) ps
   isA = liftM (/= GL_FALSE) . glIsFramebuffer. objectId
 
 instance GenObject Framebuffer where
-  gen n = liftIO $ allocaArray n $ \ps -> do
+  gen n = liftBase $ allocaArray n $ \ps -> do
     glGenFramebuffers (fromIntegral n) ps
     coerce <$> peekArray n ps
 

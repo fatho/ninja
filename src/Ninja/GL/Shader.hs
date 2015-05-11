@@ -9,6 +9,7 @@ module Ninja.GL.Shader where
 import           Control.Applicative
 import           Control.Exception
 import           Control.Monad
+import           Control.Monad.Base
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.Control
 import           Control.Monad.Trans.Resource
@@ -49,7 +50,7 @@ compileShader shader = do
   glCompileShader (objectId shader)
   success <- (GL_FALSE /=) <$> withPtrOut (glGetShaderiv (objectId shader) GL_COMPILE_STATUS)
   logsize <- withPtrOut $ glGetShaderiv (objectId shader) GL_INFO_LOG_LENGTH
-  logstr <- liftIO $ allocaBytes (fromIntegral logsize) $ \cstr -> do
+  logstr <- liftBase $ allocaBytes (fromIntegral logsize) $ \cstr -> do
               glGetShaderInfoLog (objectId shader) logsize nullPtr cstr
               peekCString cstr
   unless success $ throw $ ShaderCompileError logstr
@@ -61,15 +62,15 @@ shaderType shader = makeGettableStateVar $
 
 class ShaderSource a where
   withSourcePtr :: (MonadBaseControl IO m) => a -> (CStringLen -> m b) -> m b
-  fromSourcePtr :: (MonadIO m) => CStringLen -> m a
+  fromSourcePtr :: (MonadBase IO m) => CStringLen -> m a
 
 instance ShaderSource String where
   withSourcePtr s = liftBaseOp (withCStringLen s)
-  fromSourcePtr = liftIO . peekCStringLen
+  fromSourcePtr = liftBase . peekCStringLen
 
 instance ShaderSource BS.ByteString where
   withSourcePtr s = liftBaseOp (BSU.unsafeUseAsCStringLen s)
-  fromSourcePtr = liftIO . BS.packCStringLen
+  fromSourcePtr = liftBase . BS.packCStringLen
 
 -- | Gets or sets the source code of a shader.
 shaderSource :: ShaderSource a => Shader -> StateVar a
@@ -88,7 +89,7 @@ shaderSource shader = makeStateVar g s where
 createShaderFromSource :: (MonadResource m, ShaderSource a) => ShaderType -> a -> m (ReleaseKey,Shader)
 createShaderFromSource shtype src = do
   (rkey, shd) <- allocate (createShader shtype) delete1
-  liftIO $ do
+  liftBase $ do
     shaderSource shd $= src
     compileShader shd
   return (rkey,shd)

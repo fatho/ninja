@@ -12,6 +12,7 @@ import qualified Codec.Picture.Types                           as JP
 import           Control.Applicative
 import           Control.Lens                                  hiding (coerce)
 import           Control.Monad
+import           Control.Monad.Base
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.Control
 import           Data.Coerce
@@ -80,8 +81,8 @@ withTexture target = withVar (boundTexture target)
 -- * Textures from file
 
 -- | Loads a texture from a file using 'JP.readImage'.
-textureFromFile :: MonadIO m => FilePath -> Bool -> m Texture
-textureFromFile path generateMipmaps = liftIO $ do
+textureFromFile :: MonadBase IO m => FilePath -> Bool -> m Texture
+textureFromFile path generateMipmaps = liftBase $ do
   img <- JP.readImage path >>= \case
     Left err -> ioError $ userError $ "failed to load image: " ++ err
     Right x -> return x
@@ -145,17 +146,17 @@ class TextureAccess d where
   -- | Uploads image data and allocates storage in the process.
   textureImage :: (TextureData a d) => TextureTarget -> MipmapLevel -> TextureInternalFormat -> SettableStateVar a
   -- | Initializes a multisample texture.
-  textureImageMultisample :: (MonadIO m) => TextureTarget -> MipmapLevel -> TextureInternalFormat -> d GLsizei -> Bool -> m ()
+  textureImageMultisample :: (MonadBase IO m) => TextureTarget -> MipmapLevel -> TextureInternalFormat -> d GLsizei -> Bool -> m ()
   -- | Configures texture wrapping.
   textureWrap :: TextureTarget -> StateVar (d TextureWrap)
   -- | Only allocates storage for the texture.
   textureStorage :: (MonadIO m) => TextureTarget -> Int -> TextureInternalFormat -> d GLsizei -> m ()
   -- | Only allocates storage for a multisample texture.
-  textureStorageMultisample :: (MonadIO m) => TextureTarget -> Int -> TextureInternalFormat -> d GLsizei -> Bool -> m ()
+  textureStorageMultisample :: (MonadBase IO m) => TextureTarget -> Int -> TextureInternalFormat -> d GLsizei -> Bool -> m ()
   -- | Accesses a subimage of a texture beginning at the given offset.
   textureSubImage :: (TextureData a d) => TextureTarget -> MipmapLevel -> d GLint -> SettableStateVar a
   -- | Clears a part of the texture
-  textureClearSubImage :: (MonadIO m) => Texture -> MipmapLevel -> d GLint -> d GLsizei -> Color -> m ()
+  textureClearSubImage :: (MonadBase IO m) => Texture -> MipmapLevel -> d GLint -> d GLsizei -> Color -> m ()
 
 -- | Clears the texture using the given color.
 textureClearImage :: Texture -> Int -> Color -> IO ()
@@ -185,7 +186,7 @@ instance TextureAccess V1 where
     $ \fmt dataTy (V1 w) dat ->
         glTexSubImage1D target (fromIntegral lvl) x w fmt dataTy dat
 
-  textureClearSubImage tex lvl (V1 x) (V1 w) col = liftIO $ withPtrIn col $ \ptr ->
+  textureClearSubImage tex lvl (V1 x) (V1 w) col = liftBase $ withPtrIn col $ \ptr ->
     TexClear.glClearTexSubImage (objectId tex) (fromIntegral lvl) x 0 0 w 1 1 GL_RGBA GL_FLOAT (castPtr ptr)
 
 instance TextureAccess V2 where
@@ -193,7 +194,7 @@ instance TextureAccess V2 where
    $ \fmt dataTy (V2 w h) dat ->
        glTexImage2D target (fromIntegral lvl) innerFmt w h 0 fmt dataTy dat
 
-  textureImageMultisample (TextureTarget _ target) samples innerFmt (V2 w h) fixed =
+  textureImageMultisample (TextureTarget _ target) samples innerFmt (V2 w h) fixed = liftBase $
     glTexImage2DMultisample target (fromIntegral samples) (fromIntegral innerFmt) w h (toGLBool fixed)
 
   textureWrap target = combineStateVars (uncurry V2) (\(V2 x y) -> (x,y)) 
@@ -203,14 +204,14 @@ instance TextureAccess V2 where
   textureStorage (TextureTarget _ target) numLevels innerFmt (V2 w h) =
     TexStore.glTexStorage2D target (fromIntegral numLevels) (fromIntegral innerFmt) w h
 
-  textureStorageMultisample (TextureTarget _ target) samples innerFmt (V2 w h) fixed =
+  textureStorageMultisample (TextureTarget _ target) samples innerFmt (V2 w h) fixed = liftBase $
     TexStore.glTexStorage2DMultisample target (fromIntegral samples) (fromIntegral innerFmt) w h (toGLBool fixed)
 
   textureSubImage (TextureTarget _ target) lvl (V2 x y) = makeSettableStateVar $ flip withRawTexture
     $ \fmt dataTy (V2 w h) dat ->
         glTexSubImage2D target (fromIntegral lvl) x y w h fmt dataTy dat
 
-  textureClearSubImage tex lvl (V2 x y) (V2 w h) col = liftIO $ withPtrIn col $ \ptr ->
+  textureClearSubImage tex lvl (V2 x y) (V2 w h) col = liftBase $ withPtrIn col $ \ptr ->
     TexClear.glClearTexSubImage (objectId tex) (fromIntegral lvl) x y 0 w h 1 GL_RGBA GL_FLOAT (castPtr ptr)
 
 instance TextureAccess V3 where
@@ -218,7 +219,7 @@ instance TextureAccess V3 where
    $ \fmt dataTy (V3 w h d) dat ->
        glTexImage3D target (fromIntegral lvl) innerFmt w h d 0 fmt dataTy dat
 
-  textureImageMultisample (TextureTarget _ target) samples innerFmt (V3 w h d) fixed =
+  textureImageMultisample (TextureTarget _ target) samples innerFmt (V3 w h d) fixed = liftBase $
     glTexImage3DMultisample target (fromIntegral samples) (fromIntegral innerFmt) w h d (toGLBool fixed)
 
   textureWrap target = combineStateVars (\(V2 s t, r) -> V3 s t r) (\(V3 s t r) -> (V2 s t, r)) 
@@ -228,14 +229,14 @@ instance TextureAccess V3 where
   textureStorage (TextureTarget _ target) numLevels innerFmt (V3 w h d) =
     TexStore.glTexStorage3D target (fromIntegral numLevels) (fromIntegral innerFmt) w h d
 
-  textureStorageMultisample (TextureTarget _ target) samples innerFmt (V3 w h d) fixed =
+  textureStorageMultisample (TextureTarget _ target) samples innerFmt (V3 w h d) fixed = liftBase $
     TexStore.glTexStorage3DMultisample target (fromIntegral samples) (fromIntegral innerFmt) w h d (toGLBool fixed)
 
   textureSubImage (TextureTarget _ target) lvl (V3 x y z) = makeSettableStateVar $ flip withRawTexture
     $ \fmt dataTy (V3 w h d) dat ->
         glTexSubImage3D target (fromIntegral lvl) x y z w h d fmt dataTy dat
 
-  textureClearSubImage tex lvl (V3 x y z) (V3 w h d) col = liftIO $ withPtrIn col $ \ptr ->
+  textureClearSubImage tex lvl (V3 x y z) (V3 w h d) col = liftBase $ withPtrIn col $ \ptr ->
     TexClear.glClearTexSubImage (objectId tex) (fromIntegral lvl) x y z w h d GL_RGBA GL_FLOAT (castPtr ptr)
 
 -- * Texture Parameters
