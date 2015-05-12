@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE RecordWildCards       #-}
 module Ninja.GL.Framebuffer where
 
 import           Control.Applicative
@@ -39,11 +40,11 @@ type FramebufferAttachement = GLenum
 
 instance Object Framebuffer where
   objectId = coerce
-  delete xs = liftBase $ withArrayLen (coerce xs) $ \n ps -> glDeleteFramebuffers (fromIntegral n) ps
+  delete xs = liftIO $ withArrayLen (coerce xs) $ \n ps -> glDeleteFramebuffers (fromIntegral n) ps
   isA = liftM (/= GL_FALSE) . glIsFramebuffer. objectId
 
 instance GenObject Framebuffer where
-  gen n = liftBase $ allocaArray n $ \ps -> do
+  gen n = liftIO $ allocaArray n $ \ps -> do
     glGenFramebuffers (fromIntegral n) ps
     coerce <$> peekArray n ps
 
@@ -52,10 +53,11 @@ instance Default Framebuffer where
 
 -- | Wrapper for 'glBindFramebuffer' and 'glGetIntegerv' with GL_*FRAMEBUFFER_BINDING
 boundFrameBuffer :: FramebufferTarget -> StateVar Framebuffer
-boundFrameBuffer (FramebufferTarget target binding) = makeStateVar g s where
-  g = withPtrOut (glGetIntegerv binding)
-  s = glBindFramebuffer target . objectId
+boundFrameBuffer FramebufferTarget{..} = makeStateVar g s where
+  g = Framebuffer . fromIntegral <$> withPtrOut (glGetIntegerv fbTargetBinding)
+  s = glBindFramebuffer fbTarget . objectId
 
+-- | Bind an FBO during the execution of the supplied action, revert to default afterwards
 withFBO :: (MonadBaseControl IO m, MonadIO m) => FramebufferTarget -> Framebuffer -> m a -> m a
 withFBO = withVar . boundFrameBuffer
 
