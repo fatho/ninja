@@ -31,11 +31,18 @@ library
                         Graphics.Ninja.GL.VertexArray
                         Graphics.Ninja.GL.VertexAttrib
                         Graphics.Ninja.GL2D.Sprite
+                        Graphics.Ninja.Math.Interpolation
                         Graphics.Ninja.Storable.Generics
                         Graphics.Ninja.Util
                         Graphics.Ninja.Particles
                         Graphics.Ninja.Types
-  -- other-extensions:    
+                        Graphics.Ninja.Noise
+                        Graphics.Ninja.Noise.Fractal
+                        Graphics.Ninja.Noise.Gradient
+                        Graphics.Ninja.Noise.Select
+                        Graphics.Ninja.Noise.Simplex
+                        Graphics.Ninja.Noise.Types
+  -- other-extensions:
   build-depends:        base >=4.7 && <4.8
                       , GLFW-b
                       , gl
@@ -57,6 +64,8 @@ library
                       , raw-strings-qq
                       , containers
                       , resourcet
+                      , random
+                      , random-shuffle
   hs-source-dirs:       src
   default-language:     Haskell2010
 
