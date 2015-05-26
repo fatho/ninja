@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE LambdaCase             #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
@@ -109,37 +110,73 @@ type TextureType = GLenum
 class TextureData a d | a -> d where
   withRawTexture :: (MonadBaseControl IO m, MonadIO m) => a -> (TextureFormat -> TextureType -> d GLsizei -> Ptr () -> m ()) -> m ()
 
+-- | Use a JuicyPixels image as texture source.
+-- Since JuicyPixels stores images top to bottom whereas OpenGL stores them bottom to top,
+-- a temporary flipped copy is created before invoking the continuation.
+withImage :: (Storable (JP.PixelBaseComponent a), MonadBaseControl IO m, JP.Pixel a)
+             => GLenum -> GLenum -> JP.Image a
+             -> (TextureFormat -> TextureType -> V2 GLsizei -> Ptr () -> m c)
+             -> m c
+withImage fmt dataType img f = liftBaseOp (VS.unsafeWith (JP.imageData $ flipImage img)) action where
+  action dataArr =
+    f fmt
+      dataType
+      (fromIntegral <$> V2 (JP.imageWidth img) (JP.imageHeight img))
+      (castPtr dataArr)
+
+instance TextureData (JP.Image JP.PixelRGBA8) V2 where
+  withRawTexture = withImage GL_RGBA GL_UNSIGNED_BYTE
+
+instance TextureData (JP.Image JP.PixelRGBA16) V2 where
+  withRawTexture = withImage GL_RGBA GL_UNSIGNED_SHORT
+
+instance TextureData (JP.Image JP.PixelRGB8) V2 where
+  withRawTexture = withImage GL_RGB GL_UNSIGNED_BYTE
+
+instance TextureData (JP.Image JP.PixelRGB16) V2 where
+  withRawTexture = withImage GL_RGB GL_UNSIGNED_SHORT
+
+instance TextureData (JP.Image JP.PixelRGBF) V2 where
+  withRawTexture = withImage GL_RGB GL_FLOAT
+
+instance TextureData (JP.Image JP.Pixel8) V2 where
+  withRawTexture = withImage GL_RED GL_UNSIGNED_BYTE
+
+instance TextureData (JP.Image JP.Pixel16) V2 where
+  withRawTexture = withImage GL_RED GL_UNSIGNED_SHORT
+
+instance TextureData (JP.Image JP.PixelF) V2 where
+  withRawTexture = withImage GL_RED GL_FLOAT
+
+instance TextureData (JP.Image JP.PixelYA8) V2 where
+  withRawTexture = withImage GL_RG GL_UNSIGNED_BYTE
+
+instance TextureData (JP.Image JP.PixelYA16) V2 where
+  withRawTexture = withImage GL_RG GL_UNSIGNED_SHORT
+
 -- | Note that OpenGL requires the texture origin in the bottom left-hand corner, whereas JuicyPixels uses the top left-hand corner.
 -- Therefore, a copy of the image is flipped on the fly before being loaded.
 instance TextureData JP.DynamicImage V2 where
-  withRawTexture tex f = control $ \runInBase -> let f' = ((.).(.).(.).(.)) runInBase f in
+  withRawTexture tex =
       case tex of
-        JP.ImageY8 img -> go f' (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA8) GL_RGBA GL_UNSIGNED_BYTE
-        JP.ImageY16 img -> go f' (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA16) GL_RGBA GL_UNSIGNED_SHORT
-        JP.ImageYF img -> go f' (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBF) GL_RGBA GL_UNSIGNED_SHORT
-        JP.ImageYA8 img -> go f' (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA8) GL_RGBA GL_UNSIGNED_BYTE
-        JP.ImageYA16 img -> go f' (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA16) GL_RGBA GL_UNSIGNED_SHORT
-        JP.ImageRGB8 img -> go f' (flipImage $ JP.promoteImage img :: JP.Image JP.PixelRGBA8) GL_RGBA GL_UNSIGNED_BYTE
-        JP.ImageRGB16 img -> go f' (flipImage img) GL_RGB GL_UNSIGNED_SHORT
-        JP.ImageRGBF img -> go f' (flipImage img) GL_RGB GL_FLOAT
-        JP.ImageRGBA8 img -> go f' (flipImage img) GL_RGBA GL_UNSIGNED_BYTE
-        JP.ImageRGBA16 img -> go f' (flipImage img) GL_RGBA GL_UNSIGNED_SHORT
-        JP.ImageYCbCr8 img -> go f' (flipImage $ toRGBA8 img) GL_RGBA GL_UNSIGNED_BYTE
-        JP.ImageCMYK8 img -> go f' (flipImage $ toRGBA8 img) GL_RGBA GL_UNSIGNED_BYTE
-        JP.ImageCMYK16 img -> go f' (flipImage $ toRGBA16 img :: JP.Image JP.PixelRGBA16) GL_RGBA GL_UNSIGNED_SHORT
+        JP.ImageY8 img -> withRawTexture img
+        JP.ImageY16 img -> withRawTexture img
+        JP.ImageYF img -> withRawTexture img
+        JP.ImageYA8 img -> withRawTexture img
+        JP.ImageYA16 img -> withRawTexture img
+        JP.ImageRGB8 img -> withRawTexture img
+        JP.ImageRGB16 img -> withRawTexture img
+        JP.ImageRGBF img -> withRawTexture img
+        JP.ImageRGBA8 img -> withRawTexture img
+        JP.ImageRGBA16 img -> withRawTexture img
+        JP.ImageYCbCr8 img -> withRawTexture (toRGBA8 img)
+        JP.ImageCMYK8 img -> withRawTexture (toRGBA8 img)
+        JP.ImageCMYK16 img -> withRawTexture (toRGBA16 img)
     where
         toRGBA8 :: JP.ColorSpaceConvertible a JP.PixelRGB8 => JP.Image a -> JP.Image JP.PixelRGBA8
         toRGBA8 x = JP.promoteImage (JP.convertImage x :: JP.Image JP.PixelRGB8)
         toRGBA16 :: JP.ColorSpaceConvertible a JP.PixelRGB16 => JP.Image a -> JP.Image JP.PixelRGBA16
         toRGBA16 x = JP.promoteImage (JP.convertImage x :: JP.Image JP.PixelRGB16)
-
-        go :: Storable (JP.PixelBaseComponent a)
-            => (TextureFormat -> TextureType -> V2 GLsizei -> Ptr () -> IO c)
-            -> JP.Image a -> GLenum -> GLenum -> IO c
-        go f img fmt dataType = VS.unsafeWith (JP.imageData img) $ \dataArr ->
-            f fmt dataType
-                (fromIntegral <$> V2 (JP.imageWidth img) (JP.imageHeight img))
-                (castPtr dataArr)
 
 -- | Provides generic access to textures of varying dimensions.
 class TextureAccess d where
@@ -197,8 +234,8 @@ instance TextureAccess V2 where
   textureImageMultisample (TextureTarget _ target) samples innerFmt (V2 w h) fixed = liftBase $
     glTexImage2DMultisample target (fromIntegral samples) (fromIntegral innerFmt) w h (toGLBool fixed)
 
-  textureWrap target = combineStateVars (uncurry V2) (\(V2 x y) -> (x,y)) 
-                                        (textureWrap' GL_TEXTURE_WRAP_S target) 
+  textureWrap target = combineStateVars (uncurry V2) (\(V2 x y) -> (x,y))
+                                        (textureWrap' GL_TEXTURE_WRAP_S target)
                                         (textureWrap' GL_TEXTURE_WRAP_T target)
 
   textureStorage (TextureTarget _ target) numLevels innerFmt (V2 w h) =
@@ -222,8 +259,8 @@ instance TextureAccess V3 where
   textureImageMultisample (TextureTarget _ target) samples innerFmt (V3 w h d) fixed = liftBase $
     glTexImage3DMultisample target (fromIntegral samples) (fromIntegral innerFmt) w h d (toGLBool fixed)
 
-  textureWrap target = combineStateVars (\(V2 s t, r) -> V3 s t r) (\(V3 s t r) -> (V2 s t, r)) 
-                                        (textureWrap target) 
+  textureWrap target = combineStateVars (\(V2 s t, r) -> V3 s t r) (\(V3 s t r) -> (V2 s t, r))
+                                        (textureWrap target)
                                         (textureWrap' GL_TEXTURE_WRAP_R target)
 
   textureStorage (TextureTarget _ target) numLevels innerFmt (V3 w h d) =
@@ -272,7 +309,7 @@ textureMagFilter (TextureTarget _ target) = makeStateVar g s where
   s (TextureFilter f) = glTexParameteri target GL_TEXTURE_MAG_FILTER (fromIntegral f)
 
 -- | Generates the mip maps.
-generateMipMap :: TextureTarget -> IO ()
+generateMipMap :: MonadIO m => TextureTarget -> m ()
 generateMipMap (TextureTarget _ target) = glGenerateMipmap target
 
 pattern FilterNearest = TextureFilter GL_NEAREST
