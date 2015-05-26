@@ -42,6 +42,7 @@ library
                         Graphics.Ninja.Noise.Select
                         Graphics.Ninja.Noise.Simplex
                         Graphics.Ninja.Noise.Types
+                        Graphics.Ninja.UI
   -- other-extensions:
   build-depends:        base >=4.7 && <4.8
                       , GLFW-b
