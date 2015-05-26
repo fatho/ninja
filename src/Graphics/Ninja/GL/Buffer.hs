@@ -2,7 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-module Ninja.GL.Buffer where
+module Graphics.Ninja.GL.Buffer where
 
 import           Control.Applicative
 import           Control.Monad
@@ -21,8 +21,8 @@ import           Foreign.Storable
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
 
-import           Ninja.GL.Object
-import           Ninja.Util
+import           Graphics.Ninja.GL.Object
+import           Graphics.Ninja.Util
 
 -- | Encapsulates an OpenGL buffer target.
 data BufferTarget = BufferTarget GLenum GLenum deriving (Eq, Ord, Show)

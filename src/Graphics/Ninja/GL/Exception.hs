@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-module Ninja.GL.Exception where
+module Graphics.Ninja.GL.Exception where
 
 import Control.Exception
 import Data.Typeable

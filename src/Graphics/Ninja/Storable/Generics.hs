@@ -4,7 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeOperators       #-}
-module Ninja.Storable.Generics where
+module Graphics.Ninja.Storable.Generics where
 
 import           Control.Applicative
 import           Foreign.Ptr

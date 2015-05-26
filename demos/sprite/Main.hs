@@ -22,9 +22,9 @@ import           Linear
 import           System.Directory                as Dir
 import           System.IO
 
-import           Ninja.GL
-import           Ninja.GL2D.Sprite
-import           Ninja.Util
+import           Graphics.Ninja.GL
+import           Graphics.Ninja.GL2D.Sprite
+import           Graphics.Ninja.Util
 
 onDebugMessage :: GLenum -> GLenum -> GLuint -> GLenum -> GLsizei -> Ptr GLchar -> Ptr () -> IO ()
 onDebugMessage _ _ _ _ len msg _ = do

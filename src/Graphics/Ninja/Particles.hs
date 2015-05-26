@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-module Ninja.Particles where
+module Graphics.Ninja.Particles where
 
 import qualified Codec.Picture          as JP
 import           Control.Applicative
@@ -24,7 +24,7 @@ import           Graphics.GL.Types
 import           Linear
 import qualified Data.Map as M
 
-import           Ninja.GL
+import           Graphics.Ninja.GL
 
 type TileCoord = V2 (V2 Float)
 type SpriteId  = Int

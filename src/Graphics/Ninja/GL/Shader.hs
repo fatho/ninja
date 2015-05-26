@@ -4,7 +4,7 @@
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
-module Ninja.GL.Shader where
+module Graphics.Ninja.GL.Shader where
 
 import           Control.Applicative
 import           Control.Exception
@@ -23,9 +23,9 @@ import           Foreign.Ptr
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
 
-import           Ninja.GL.Exception
-import           Ninja.GL.Object
-import           Ninja.Util
+import           Graphics.Ninja.GL.Exception
+import           Graphics.Ninja.GL.Object
+import           Graphics.Ninja.Util
 
 -- | Shader object
 newtype Shader = Shader GLuint deriving (Eq, Ord, Show)

@@ -1,7 +1,7 @@
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-module Ninja.GL.Uniform where
+module Graphics.Ninja.GL.Uniform where
 
 import           Control.Applicative
 import           Control.Monad.IO.Class
@@ -17,9 +17,9 @@ import           Graphics.GL.Core33
 import           Graphics.GL.Types
 import           Linear
 
-import           Ninja.GL.Object
-import           Ninja.GL.Program
-import           Ninja.Util
+import           Graphics.Ninja.GL.Object
+import           Graphics.Ninja.GL.Program
+import           Graphics.Ninja.Util
 
 -- | A uniform is just an index.
 newtype Uniform a = Uniform { uniformIndex :: GLint } deriving (Eq, Ord, Show)

@@ -4,7 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeOperators       #-}
-module Ninja.GL.VertexAttrib where
+module Graphics.Ninja.GL.VertexAttrib where
 
 import           Control.Applicative
 import           Control.Lens           hiding (coerce, from)
@@ -21,9 +21,9 @@ import           Graphics.GL.Core33
 import           Graphics.GL.Types
 import           Linear
 
-import           Ninja.GL.Program
-import           Ninja.GL.Types
-import           Ninja.Util
+import           Graphics.Ninja.GL.Program
+import           Graphics.Ninja.GL.Types
+import           Graphics.Ninja.Util
 
 -- * Vertex Attributes
 

@@ -17,24 +17,24 @@ extra-source-files:  README.md
 cabal-version:       >=1.10
 
 library
-  exposed-modules:      Ninja.GL
-                        Ninja.GL.Blending
-                        Ninja.GL.Buffer
-                        Ninja.GL.Exception
-                        Ninja.GL.Framebuffer
-                        Ninja.GL.Object
-                        Ninja.GL.Program
-                        Ninja.GL.Shader
-                        Ninja.GL.Texture
-                        Ninja.GL.Types
-                        Ninja.GL.Uniform
-                        Ninja.GL.VertexArray
-                        Ninja.GL.VertexAttrib
-                        Ninja.GL2D.Sprite
-                        Ninja.Storable.Generics
-                        Ninja.Util
-                        Ninja.Particles
-                        Ninja.Types
+  exposed-modules:      Graphics.Ninja.GL
+                        Graphics.Ninja.GL.Blending
+                        Graphics.Ninja.GL.Buffer
+                        Graphics.Ninja.GL.Exception
+                        Graphics.Ninja.GL.Framebuffer
+                        Graphics.Ninja.GL.Object
+                        Graphics.Ninja.GL.Program
+                        Graphics.Ninja.GL.Shader
+                        Graphics.Ninja.GL.Texture
+                        Graphics.Ninja.GL.Types
+                        Graphics.Ninja.GL.Uniform
+                        Graphics.Ninja.GL.VertexArray
+                        Graphics.Ninja.GL.VertexAttrib
+                        Graphics.Ninja.GL2D.Sprite
+                        Graphics.Ninja.Storable.Generics
+                        Graphics.Ninja.Util
+                        Graphics.Ninja.Particles
+                        Graphics.Ninja.Types
   -- other-extensions:    
   build-depends:        base >=4.7 && <4.8
                       , GLFW-b

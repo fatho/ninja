@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-module Ninja.GL.Program where
+module Graphics.Ninja.GL.Program where
 
 import           Control.Applicative
 import           Control.Exception
@@ -21,10 +21,10 @@ import           Foreign.Storable
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
 
-import           Ninja.GL.Exception
-import           Ninja.GL.Object
-import           Ninja.GL.Shader
-import           Ninja.Util
+import           Graphics.Ninja.GL.Exception
+import           Graphics.Ninja.GL.Object
+import           Graphics.Ninja.GL.Shader
+import           Graphics.Ninja.Util
 
 -- | Shader Program object handle
 newtype Program = Program GLuint deriving (Eq, Ord, Show)

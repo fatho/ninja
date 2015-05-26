@@ -1,4 +1,4 @@
-module Ninja.GL.Object where
+module Graphics.Ninja.GL.Object where
 
 import           Control.Monad
 import           Control.Monad.IO.Class

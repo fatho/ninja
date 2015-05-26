@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-module Ninja.Util where
+module Graphics.Ninja.Util where
 
 import qualified Codec.Picture                as JP
 import qualified Codec.Picture.Types          as JP
@@ -19,7 +19,7 @@ import           Foreign.Ptr
 import           Foreign.Storable
 import           System.IO.Unsafe
 
-import           Ninja.Types
+import           Graphics.Ninja.Types
 
 -- | Modifies a StateVar locally.
 withVar :: (ControlIO m) => StateVar a -> a -> m b -> m b

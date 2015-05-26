@@ -5,7 +5,7 @@
 {-# LANGUAGE PatternSynonyms        #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE TypeFamilies           #-}
-module Ninja.GL.Texture where
+module Graphics.Ninja.GL.Texture where
 
 import qualified Codec.Picture                                 as JP
 import qualified Codec.Picture.Types                           as JP
@@ -29,9 +29,9 @@ import qualified Graphics.GL.Ext.ARB.TextureStorageMultisample as TexStore
 import           Graphics.GL.Types
 import           Linear
 
-import           Ninja.GL.Object
-import           Ninja.GL.Types
-import           Ninja.Util
+import           Graphics.Ninja.GL.Object
+import           Graphics.Ninja.GL.Types
+import           Graphics.Ninja.Util
 
 -- | Encapsulates an OpenGL texture target.
 data TextureTarget = TextureTarget { texTargetBinding :: GLenum, texTarget :: GLenum } deriving (Eq, Ord, Show)

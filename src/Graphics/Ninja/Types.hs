@@ -1,5 +1,5 @@
 {-# LANGUAGE ConstraintKinds #-}
-module Ninja.Types where
+module Graphics.Ninja.Types where
 
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Control

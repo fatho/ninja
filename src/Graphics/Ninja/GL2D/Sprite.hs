@@ -4,7 +4,7 @@
 {-# LANGUAGE LambdaCase         #-}
 {-# LANGUAGE QuasiQuotes        #-}
 {-# LANGUAGE RecordWildCards    #-}
-module Ninja.GL2D.Sprite where
+module Graphics.Ninja.GL2D.Sprite where
 
 import           Control.Lens
 import           Data.Data
@@ -17,8 +17,8 @@ import           Graphics.GL.Types
 import           Linear
 import           Text.RawString.QQ
 
-import           Ninja.GL
-import           Ninja.Storable.Generics
+import           Graphics.Ninja.GL
+import           Graphics.Ninja.Storable.Generics
 
 -- | Data associated with a sprite, ready to be sent to the shader.
 data SpriteVertex = SpriteVertex

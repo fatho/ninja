@@ -1,6 +1,6 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
-module Ninja.GL.Blending where
+module Graphics.Ninja.GL.Blending where
 
 import           Control.Applicative
 import           Data.StateVar
@@ -9,8 +9,8 @@ import           Graphics.GL.Core33
 import           Graphics.GL.Types
 import           Linear
 
-import           Ninja.GL.Types
-import           Ninja.Util
+import           Graphics.Ninja.GL.Types
+import           Graphics.Ninja.Util
 
 -- | Wraps the blending parameters for 'glBlendFuncSeparate'.
 data BlendEquation = BlendEquation

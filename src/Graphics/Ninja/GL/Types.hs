@@ -1,4 +1,4 @@
-module Ninja.GL.Types where
+module Graphics.Ninja.GL.Types where
 
 import Linear
 import Graphics.GL.Types

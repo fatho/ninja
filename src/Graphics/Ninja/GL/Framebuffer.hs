@@ -2,7 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE RecordWildCards       #-}
-module Ninja.GL.Framebuffer where
+module Graphics.Ninja.GL.Framebuffer where
 
 import           Control.Applicative
 import           Control.Monad
@@ -20,9 +20,9 @@ import           Foreign.Storable
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
 
-import           Ninja.GL.Object
-import           Ninja.GL.Texture
-import           Ninja.Util
+import           Graphics.Ninja.GL.Object
+import           Graphics.Ninja.GL.Texture
+import           Graphics.Ninja.Util
 
 newtype Framebuffer = Framebuffer GLuint deriving (Eq, Ord, Show)
 
