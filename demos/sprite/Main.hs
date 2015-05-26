@@ -1,5 +1,4 @@
 {-# LANGUAGE DataKinds                #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE LambdaCase               #-}
 module Main where
 
@@ -58,8 +57,8 @@ main = withGLFW (Windowed 800 800) "Yolo Ninja" hints $ \win -> do
     --sampleTex <- textureFromFile "data/tex/alpha.png" True
     redTex <- gen1
     boundTexture Texture2D $= redTex
-    textureMinFilter Texture2D $= FilterNearest
-    textureMagFilter Texture2D $= FilterNearest
+    textureMinFilter Texture2D $= GL_NEAREST
+    textureMagFilter Texture2D $= GL_NEAREST
     textureStorage Texture2D 1 GL_RGBA8 (V2 2 2)
     textureSubImage Texture2D 0 0 $= JP.ImageRGBA8
       (JP.Image 2 2 (VS.fromList [ 255, 0, 0, 255,  0, 255, 0, 255

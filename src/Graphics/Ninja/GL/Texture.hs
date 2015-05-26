@@ -90,13 +90,13 @@ textureFromFile path generateMipmaps = liftBase $ do
   tex <- gen1
   withTexture Texture2D tex $ do
     textureImage Texture2D 0 GL_RGBA8 $= img
-    textureWrap Texture2D $= V2 WrapClampToEdge WrapClampToEdge
+    textureWrap Texture2D $= V2 GL_CLAMP_TO_EDGE GL_CLAMP_TO_EDGE
     if generateMipmaps
         then do
             generateMipMap Texture2D
-            textureMinFilter Texture2D $= FilterNearestMipMapLinear
-        else textureMinFilter Texture2D $= FilterLinear
-    textureMagFilter Texture2D $= FilterLinear
+            textureMinFilter Texture2D $= GL_LINEAR_MIPMAP_LINEAR
+        else textureMinFilter Texture2D $= GL_LINEAR
+    textureMagFilter Texture2D $= GL_LINEAR
   return tex
 
 -- * Texture Image
@@ -202,8 +202,8 @@ textureClearImage tex level col = withPtrIn col $ \ptr ->
 
 textureWrap' :: GLenum -> TextureTarget -> StateVar TextureWrap
 textureWrap' idx (TextureTarget _ target) = makeStateVar g s where
-    g = TextureWrap . fromIntegral <$> withPtrOut (glGetTexParameteriv target idx)
-    s = glTexParameteri target idx . fromIntegral . fromTextureWrap
+    g = fromIntegral <$> withPtrOut (glGetTexParameteriv target idx)
+    s = glTexParameteri target idx . fromIntegral
 
 instance TextureAccess V1 where
   textureImage (TextureTarget _ target) lvl innerFmt = makeSettableStateVar $ flip withRawTexture
@@ -278,8 +278,7 @@ instance TextureAccess V3 where
 
 -- * Texture Parameters
 
--- | Wraps texture wrapping enum values.
-newtype TextureWrap = TextureWrap { fromTextureWrap :: GLenum } deriving (Eq, Ord, Show)
+type TextureWrap = GLenum
 
 -- | Controls the border color used for 'GL_CLAMP_TO_BORDER'.
 textureBorderColor :: TextureTarget -> StateVar Color
@@ -287,37 +286,25 @@ textureBorderColor (TextureTarget _ target) = makeStateVar g s where
   g = withPtrOut (glGetTexParameterfv target GL_TEXTURE_BORDER_COLOR . castPtr)
   s col = withPtrIn col $ glTexParameterfv target GL_TEXTURE_BORDER_COLOR . castPtr
 
-pattern WrapRepeat = TextureWrap GL_REPEAT
-pattern WrapMirroredRepeat = TextureWrap GL_MIRRORED_REPEAT
-pattern WrapClampToEdge = TextureWrap GL_CLAMP_TO_EDGE
-pattern WrapClampToBorder = TextureWrap GL_CLAMP_TO_BORDER
-
 -- * Texture Filtering
 
-newtype TextureFilter = TextureFilter GLenum deriving (Eq, Ord, Show)
+type TextureFilter = GLenum
 
 -- | Controls the 'GL_TEXTURE_MIN_FILTER'.
 textureMinFilter :: TextureTarget -> StateVar TextureFilter
 textureMinFilter (TextureTarget _ target) = makeStateVar g s where
-  g = TextureFilter . fromIntegral <$> withPtrOut (glGetTexParameteriv target GL_TEXTURE_MIN_FILTER)
-  s (TextureFilter f) = glTexParameteri target GL_TEXTURE_MIN_FILTER (fromIntegral f)
+  g = fromIntegral <$> withPtrOut (glGetTexParameteriv target GL_TEXTURE_MIN_FILTER)
+  s f = glTexParameteri target GL_TEXTURE_MIN_FILTER (fromIntegral f)
 
 -- | Controls the 'GL_TEXTURE_MAG_FILTER'.
 textureMagFilter :: TextureTarget -> StateVar TextureFilter
 textureMagFilter (TextureTarget _ target) = makeStateVar g s where
-  g = TextureFilter . fromIntegral <$> withPtrOut (glGetTexParameteriv target GL_TEXTURE_MAG_FILTER)
-  s (TextureFilter f) = glTexParameteri target GL_TEXTURE_MAG_FILTER (fromIntegral f)
+  g = fromIntegral <$> withPtrOut (glGetTexParameteriv target GL_TEXTURE_MAG_FILTER)
+  s f = glTexParameteri target GL_TEXTURE_MAG_FILTER (fromIntegral f)
 
 -- | Generates the mip maps.
 generateMipMap :: MonadIO m => TextureTarget -> m ()
 generateMipMap (TextureTarget _ target) = glGenerateMipmap target
-
-pattern FilterNearest = TextureFilter GL_NEAREST
-pattern FilterLinear = TextureFilter GL_LINEAR
-pattern FilterNearestMipMapNearest = TextureFilter GL_NEAREST_MIPMAP_NEAREST
-pattern FilterLinearMipMapNearest = TextureFilter GL_LINEAR_MIPMAP_NEAREST
-pattern FilterNearestMipMapLinear = TextureFilter GL_NEAREST_MIPMAP_LINEAR
-pattern FilterLinearMipMapLinear = TextureFilter GL_LINEAR_MIPMAP_LINEAR
 
 -- * Texture Targets
 
