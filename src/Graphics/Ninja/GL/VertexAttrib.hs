@@ -7,16 +7,17 @@
 module Graphics.Ninja.GL.VertexAttrib where
 
 import           Control.Applicative
-import           Control.Lens           hiding (coerce, from)
+import           Control.Lens              hiding (coerce, from)
 import           Control.Monad
+import           Control.Monad.IO.Class
 import           Data.Coerce
 import           Data.Monoid
 import           Data.StateVar
 import           Foreign.C.String
 import           Foreign.Ptr
 import           Foreign.Storable
-import           GHC.Generics           (Generic, Rep)
-import qualified GHC.Generics           as Generics
+import           GHC.Generics              (Generic, Rep)
+import qualified GHC.Generics              as Generics
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
 import           Linear
@@ -31,8 +32,8 @@ import           Graphics.Ninja.Util
 newtype VertexAttrib = VertexAttrib { vertexAttribIndex :: GLuint } deriving (Eq, Ord, Show)
 
 -- | Returns the location of a vertex attribute.
-attributeOf :: Program -> String -> IO VertexAttrib
-attributeOf prog name =
+attributeOf :: MonadIO m => Program -> String -> m VertexAttrib
+attributeOf prog name = liftIO $
   VertexAttrib . fromIntegral <$> withCString name (glGetAttribLocation (coerce prog))
 
 -- | Checks if the uniform refers to a valid index.
@@ -80,7 +81,7 @@ data VertexLayout = VertexLayout
 data VertexAttribInfo = VertexAttribInfo
   { _vertexAttribName   :: String
   -- ^ Name of the attribute which is used for looking up the location.
-  , _vertexAttribWidth     :: Int
+  , _vertexAttribWidth  :: Int
   -- ^ the number of attribute locations this attribute takes up.
   , _vertexAttribLayout :: VertexAttribLayout
   -- ^ The actual layout of the attribute.
@@ -93,7 +94,7 @@ makeLenses ''VertexLayout
 
 -- | Applies a vertex layout, directly indexing the locations.
 -- WARNING: Some data types may take more than one attribute location. This was not tested.
-applyLayoutByIndex :: Int -> VertexLayout -> IO ()
+applyLayoutByIndex :: MonadIO m => Int -> VertexLayout -> m ()
 applyLayoutByIndex baseLoc = go baseLoc . view vertexAttribs where
   go _ [] = return ()
   go idx (l:ls) = do
@@ -103,12 +104,17 @@ applyLayoutByIndex baseLoc = go baseLoc . view vertexAttribs where
     go (idx + view vertexAttribWidth l) ls
 
 -- | Applies a vertex layout using the names of the attributes to determine the locations.
-applyLayoutByName :: Program -> VertexLayout -> IO ()
+applyLayoutByName :: MonadIO m => Program -> VertexLayout -> m ()
 applyLayoutByName prog = mapM_ go . view vertexAttribs where
   go layout = do
     loc <- attributeOf prog (layout ^. vertexAttribName)
     attribEnabled loc $= True
     attribLayout loc $= view vertexAttribLayout layout
+
+-- | Applies the layout of vertex data to the current vertex array object, using the supplied
+-- program for resolving the attribute locations by name.
+applyVertexLayout :: (MonadIO m, VertexData a) => Program -> a -> m ()
+applyVertexLayout prog v = applyLayoutByName prog (vertexLayout v)
 
 instance Monoid VertexLayout where
   mempty = VertexLayout 0 []
@@ -132,7 +138,7 @@ class Storable a => VertexData a where
   vertexLayout = gvertexLayout . Generics.from
 
 storableVertexLayout :: Storable a => GLenum -> Int -> Int -> a -> VertexLayout
-storableVertexLayout dataType width num x = VertexLayout (sizeOf x) 
+storableVertexLayout dataType width num x = VertexLayout (sizeOf x)
   [ VertexAttribInfo "" width $ VertexAttribLayout num dataType False (sizeOf x) 0 ]
 
 instance VertexData Float where
