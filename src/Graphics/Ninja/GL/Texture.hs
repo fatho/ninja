@@ -117,12 +117,15 @@ withImage :: (Storable (JP.PixelBaseComponent a), MonadBaseControl IO m, JP.Pixe
              => GLenum -> GLenum -> JP.Image a
              -> (TextureFormat -> TextureType -> V2 GLsizei -> Ptr () -> m c)
              -> m c
-withImage fmt dataType img f = liftBaseOp (VS.unsafeWith (JP.imageData $ flipImage img)) action where
-  action dataArr =
-    f fmt
-      dataType
-      (fromIntegral <$> V2 (JP.imageWidth img) (JP.imageHeight img))
-      (castPtr dataArr)
+withImage fmt dataType img f = do
+  let flippedImg = flipImage img
+  liftBaseOp (VS.unsafeWith (JP.imageData flippedImg)) action
+  where
+    action dataArr =
+      f fmt
+        dataType
+        (fromIntegral <$> V2 (JP.imageWidth img) (JP.imageHeight img))
+        (castPtr dataArr)
 
 instance TextureData (JP.Image JP.PixelRGBA8) V2 where
   withRawTexture = withImage GL_RGBA GL_UNSIGNED_BYTE

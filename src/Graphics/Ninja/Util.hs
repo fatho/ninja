@@ -57,9 +57,6 @@ flipRawTextureData stride height ptr =
 
 -- | Flips an image by creating a copy.
 flipImage :: forall px. (Storable (JP.PixelBaseComponent px), JP.Pixel px) => JP.Image px -> JP.Image px
-flipImage img = unsafePerformIO $ do -- Don't worry, should actually be totally safe.
-  mimg@(JP.MutableImage w h mvs) <- JP.thawImage img -- <- thawImage creates a copy
-  let isize = sizeOf (undefined :: JP.PixelBaseComponent px) * JP.componentCount (undefined :: px)
-  VSM.unsafeWith mvs $ \ptr -> flipRawTextureData (w * isize) h ptr
-  JP.unsafeFreezeImage mimg
-
+flipImage img = JP.pixelMapXY vswap img where
+  height = JP.imageHeight img
+  vswap x y _ = JP.pixelAt img x (height - 1 - y)
