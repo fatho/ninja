@@ -12,12 +12,10 @@ import           Control.Monad
 import           Control.Monad.Base
 import           Control.Monad.Trans.Control
 import           Data.StateVar
-import qualified Data.Vector.Storable.Mutable as VSM
 import           Foreign.Marshal.Alloc
 import           Foreign.Marshal.Utils
 import           Foreign.Ptr
 import           Foreign.Storable
-import           System.IO.Unsafe
 
 import           Graphics.Ninja.Types
 

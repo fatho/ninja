@@ -17,8 +17,5 @@ cabal.sandbox.config
 *.aux
 *.hp
 
-# IntelliJ
-
-.idea/
-out/
-*.iml
+# Stack
+.stack-work/

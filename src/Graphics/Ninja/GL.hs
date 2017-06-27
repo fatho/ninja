@@ -7,6 +7,7 @@ module Graphics.Ninja.GL
 import           Graphics.Ninja.GL.Blending     as NGL
 import           Graphics.Ninja.GL.Buffer       as NGL
 import           Graphics.Ninja.GL.Exception    as NGL
+import           Graphics.Ninja.GL.Extensions   as NGL
 import           Graphics.Ninja.GL.Object       as NGL
 import           Graphics.Ninja.GL.Program      as NGL
 import           Graphics.Ninja.GL.Shader       as NGL

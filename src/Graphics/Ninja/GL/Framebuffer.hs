@@ -21,7 +21,6 @@ import           Graphics.GL.Core33
 import           Graphics.GL.Types
 
 import           Graphics.Ninja.GL.Object
-import           Graphics.Ninja.GL.Texture
 import           Graphics.Ninja.Util
 
 newtype Framebuffer = Framebuffer GLuint deriving (Eq, Ord, Show)

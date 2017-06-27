@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 module Graphics.Ninja.GL.Uniform where
@@ -8,7 +9,7 @@ import           Control.Monad.IO.Class
 import           Data.Coerce
 import           Data.Distributive
 import           Data.StateVar
-import qualified Data.Vector.Storable   as VS
+import qualified Data.Vector.Storable      as VS
 import           Foreign.C.String
 import           Foreign.Marshal.Array
 import           Foreign.Ptr

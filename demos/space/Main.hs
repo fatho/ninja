@@ -26,6 +26,7 @@ import           System.Directory                as Dir
 import           System.IO
 
 import           Graphics.Ninja.GL
+import           Graphics.Ninja.UI
 import           Graphics.Ninja.GL2D.Sprite
 import           Graphics.Ninja.Util
 
@@ -54,7 +55,7 @@ onFramebufferResized _ w h =
   glViewport 0 0 (fromIntegral w) (fromIntegral h)
 
 main :: IO ()
-main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
+main = withGLFW BorderlessFullscreen "Space" hints $ \win -> do
     -- setup debug callback
     -- when using a debug context, this yields some diagnostic messages useful for troubleshooting problems
     -- and for achieving standard compliance.
@@ -69,8 +70,7 @@ main = withGLFW BorderlessFullscreen "Yolo Ninja" hints $ \win -> do
     printGLStats
 
     -- extensions that should be used if available according to <https://www.opengl.org/wiki/Common_Mistakes>
-    exts <- openGLExtensions
-    requireExtension exts "GL_ARB_texture_storage"
+    requireExtensions ["GL_ARB_texture_storage"]
     ----------------------------------------------------------
 
     putStrLn "initialization"
@@ -107,58 +107,3 @@ printGLStats = do
   withPtrOut (glGetIntegerv GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS) >>= print
   --putStrLn "Extensions:"
   --openGLExtensions >>= mapM_ (\str -> putStrLn $ "  " ++ str)
-
--- * OpenGL Extensions
-
-requireExtension :: [String] -> String -> IO ()
-requireExtension exts ext = unless (ext `elem` exts) $ ioError $ userError $ ext ++ " not available"
-
-openGLExtensions :: IO [String]
-openGLExtensions = do
-  num <- withPtrOut $ glGetIntegerv GL_NUM_EXTENSIONS
-  mapM (glGetStringi GL_EXTENSIONS . fromIntegral >=> peekCString . castPtr) [0..num-1]
-
--- * GLFW Wrapper
-
--- | Window hints stating the requirement of OpenGL 3.3 Core
-openGL33Core :: [GLFW.WindowHint]
-openGL33Core =
-  [ GLFW.WindowHint'OpenGLProfile GLFW.OpenGLProfile'Core
-  , GLFW.WindowHint'ContextVersionMajor 3
-  , GLFW.WindowHint'ContextVersionMinor 3
-  ]
-
--- | Window mode for high-level GLFW wrapper
-data WindowMode
-  = Windowed Int Int
-  | BorderlessFullscreen
-
--- | High-level GLFW initialization function.
-withGLFW :: WindowMode -> String -> [GLFW.WindowHint] -> (GLFW.Window -> IO ()) -> IO ()
-withGLFW mode title hints runApp = do
-    liftIO $ GLFW.setErrorCallback (Just onError)
-    bracket GLFW.init (`when` GLFW.terminate) $ const $ do
-        (w,h,mon) <- case mode of
-            Windowed w h -> return (w,h,Nothing)
-            BorderlessFullscreen -> do
-              mon <- GLFW.getPrimaryMonitor <?> "no primary monitor"
-              vm <- GLFW.getVideoMode mon   <?> "error getting video mode"
-              GLFW.windowHint (GLFW.WindowHint'RedBits $ GLFW.videoModeRedBits vm)
-              GLFW.windowHint (GLFW.WindowHint'GreenBits $ GLFW.videoModeGreenBits vm)
-              GLFW.windowHint (GLFW.WindowHint'BlueBits $ GLFW.videoModeBlueBits vm)
-              GLFW.windowHint (GLFW.WindowHint'RefreshRate $ GLFW.videoModeRefreshRate vm)
-              return (GLFW.videoModeWidth vm, GLFW.videoModeHeight vm, Just mon)
-        mapM_ GLFW.windowHint hints
-        win <- GLFW.createWindow w h title mon Nothing <?> "window creation failed"
-        GLFW.makeContextCurrent (Just win)
-        runApp win `finally` GLFW.destroyWindow win
-  where
-    onError err msg = do
-      putStrLn "********** INIT ERROR **********"
-      print err
-      putStrLn msg
-      putStrLn "********************************"
-
-infixr 0 <?>
-(<?>) :: IO (Maybe a) -> String -> IO a
-act <?> err = act >>= maybe (ioError $ userError err) return

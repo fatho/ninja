@@ -21,6 +21,7 @@ library
                         Graphics.Ninja.GL.Blending
                         Graphics.Ninja.GL.Buffer
                         Graphics.Ninja.GL.Exception
+                        Graphics.Ninja.GL.Extensions
                         Graphics.Ninja.GL.Framebuffer
                         Graphics.Ninja.GL.Object
                         Graphics.Ninja.GL.Program
@@ -44,7 +45,7 @@ library
                         Graphics.Ninja.Noise.Types
                         Graphics.Ninja.UI
   -- other-extensions:
-  build-depends:        base >=4.7 && <4.8
+  build-depends:        base >=4.9 && <5
                       , GLFW-b
                       , gl
                       , transformers
@@ -53,13 +54,11 @@ library
                       , monad-control
                       , transformers-base
                       , lifted-base
-                      , IfElse
                       , data-default-class
                       , StateVar
                       , vector
                       , linear
                       , bytestring
-                      , directory
                       , distributive
                       , JuicyPixels
                       , raw-strings-qq
@@ -73,7 +72,7 @@ library
 executable sprite-demo
   main-is:              Main.hs
   -- other-extensions:
-  build-depends:        base >=4.7 && <4.8
+  build-depends:        base >=4.9 && <5
                       , GLFW-b
                       , gl
                       , transformers
@@ -101,7 +100,7 @@ executable sprite-demo
 executable space-demo
   main-is:              Main.hs
   -- other-extensions:
-  build-depends:        base >=4.7 && <4.8
+  build-depends:        base >=4.9 && <5
                       , GLFW-b
                       , gl
                       , transformers
